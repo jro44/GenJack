@@ -10,401 +10,340 @@ import os
 # ==============================================================================
 
 st.set_page_config(
-    page_title="Saloon Lotto 777 (Offline)",
-    page_icon="🤠",
-    layout="wide",
+    page_title="EuroJackpot 777 (Trend 50)",
+    page_icon="🇪🇺",
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
 # ==============================================================================
-# 2. STYL WESTERN (CSS)
+# 2. STYLIZACJA (GOLD & NAVY - PRESTIGE)
 # ==============================================================================
 
 st.markdown("""
     <style>
+    /* TŁO */
     .stApp {
-        background-color: #2b2118;
-        background-image: radial-gradient(#3d2e22 2px, transparent 2px);
-        background-size: 20px 20px;
-        color: #f0e6d2;
-        font-family: 'Courier New', Courier, monospace;
+        background-color: #0f172a; /* Ciemny granat */
+        color: #f1f5f9;
+        font-family: 'Helvetica', sans-serif;
     }
-    h1, h2, h3 {
-        color: #e6b800 !important;
-        text-shadow: 2px 2px 0px #000;
-        font-family: 'Georgia', serif;
+    
+    /* NAGŁÓWKI */
+    h1 {
+        color: #fbbf24 !important; /* Euro Gold */
         text-transform: uppercase;
-        letter-spacing: 2px;
-    }
-    .wanted-poster {
-        background-color: #fdf5e6;
-        color: #3e2723;
-        border: 4px solid #3e2723;
-        padding: 15px;
-        border-radius: 2px;
-        font-family: 'Courier New', monospace;
         text-align: center;
-        margin-bottom: 20px;
-        box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
-        background-image: url("https://www.transparenttextures.com/patterns/aged-paper.png");
+        text-shadow: 0px 0px 15px rgba(251, 191, 36, 0.4);
+        font-weight: 800;
     }
-    .ball {
-        display: inline-flex;
+    h3 {
+        color: #94a3b8 !important;
+        text-align: center;
+        font-weight: 300;
+        font-size: 16px;
+    }
+    
+    /* STATUS PLIKÓW */
+    .file-status {
+        background-color: #1e293b;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        margin-bottom: 10px;
+        text-align: center;
+        font-size: 14px;
+    }
+    .status-ok { color: #4ade80; border-color: #4ade80; }
+    .status-err { color: #f87171; border-color: #f87171; }
+
+    /* KULE GŁÓWNE (5 z 50) */
+    .ball-container {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 15px;
+    }
+    .ball-main {
+        display: flex;
         justify-content: center;
         align-items: center;
-        width: 50px;
-        height: 50px;
+        width: 55px;
+        height: 55px;
         border-radius: 50%;
-        background: radial-gradient(circle at 30% 30%, #ffd700, #b8860b);
-        color: #2b2118;
+        background: radial-gradient(circle at 30% 30%, #fbbf24, #d97706);
+        color: #0f172a;
         font-weight: bold;
-        font-size: 20px;
-        border: 3px solid #5c4033;
-        margin: 4px;
-        box-shadow: 2px 4px 8px rgba(0,0,0,0.6);
-        font-family: 'Arial', sans-serif;
+        font-size: 22px;
+        border: 2px solid #fffbeb;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
+    
+    /* KULE EURO (2 z 12) */
     .ball-euro {
-        background: radial-gradient(circle at 30% 30%, #cd5c5c, #8b0000);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 55px;
+        height: 55px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%, #ef4444, #991b1b);
         color: white;
-        border-color: #5c4033;
-    }
-    .slot-machine {
-        background-color: #4a3525;
-        border: 8px solid #8B4513;
-        border-radius: 15px;
-        padding: 20px;
-        box-shadow: inset 0 0 20px #000;
-        text-align: center;
-        margin-top: 20px;
-    }
-    div.stButton > button {
-        background: linear-gradient(to bottom, #d4af37 5%, #a67c00 100%);
-        background-color: #d4af37;
-        border-radius: 10px;
-        border: 2px solid #5c4033;
-        color: #2b2118;
-        font-family: 'Georgia', serif;
         font-weight: bold;
-        font-size: 20px;
-        padding: 10px 24px;
-        text-shadow: 0px 1px 0px #ffffff;
-        box-shadow: 0px 4px 0px #5c4033;
-        transition: all 0.1s;
+        font-size: 22px;
+        border: 2px solid #fee2e2;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    
+    /* PRZYCISK */
+    div.stButton > button {
+        background: linear-gradient(to right, #fbbf24, #f59e0b);
+        color: #0f172a;
+        font-size: 18px;
+        font-weight: bold;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 50px;
         width: 100%;
+        margin-top: 20px;
+        transition: all 0.2s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    div.stButton > button:hover {
+        transform: scale(1.02);
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.6);
     }
     div.stButton > button:active {
-        transform: translateY(4px);
-        box-shadow: 0px 0px 0px #5c4033;
+        transform: scale(0.98);
     }
-    .result-row {
-        background-color: #3d2e22;
-        padding: 10px;
-        margin: 5px 0;
-        border-left: 5px solid #e6b800;
-        border-radius: 4px;
-    }
+    
+    /* METRYKI */
     div[data-testid="stMetricValue"] {
-        color: #e6b800;
+        color: #fbbf24 !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #94a3b8 !important;
+    }
+    
+    /* OSTRZEŻENIE */
+    .info-box {
+        background-color: #1e293b;
+        color: #64748b;
+        padding: 15px;
+        border-radius: 8px;
+        font-size: 11px;
+        text-align: center;
+        margin-top: 40px;
+        border-top: 1px solid #334155;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. OSTRZEŻENIE NA START
+# 3. FUNKCJE CZYTAJĄCE PDF
 # ==============================================================================
 
-st.markdown("""
-<div class="wanted-poster">
-    <h3>⚠ SYSTEM PLIKÓW LOKALNYCH (PDF) ⚠</h3>
-    <p>Tryb manualny: Pobieranie z osobnych plików (np. <b>wynlotto.pdf</b>).</p>
-    <p>Algorytm: <b>Trend 100 + Delta + Repetition</b>.</p>
-    <p>Pamiętaj: Dom (Kasyno) zawsze ma przewagę. Graj odpowiedzialnie.</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ==============================================================================
-# 4. KONFIGURACJA GIER I PLIKÓW
-# ==============================================================================
-
-GAME_CONFIG = {
-    "Lotto": {
-        "filename": "wynlotto.pdf",
-        "range": 49, "pick": 6, "sum_min": 100, "sum_max": 200, "has_bonus": False
-    },
-    "Lotto Plus": {
-        "filename": "wynlotto+.pdf",
-        "range": 49, "pick": 6, "sum_min": 100, "sum_max": 200, "has_bonus": False
-    },
-    "Multi Multi": {
-        "filename": "wynmulti.pdf",
-        "range": 80, "pick": 10, "sum_min": 250, "sum_max": 550, "has_bonus": False
-    },
-    "EuroJackpot": {
-        "filename": "wynjack.pdf",
-        "range": 50, "pick": 5, "sum_min": 95, "sum_max": 160, 
-        "has_bonus": True, "bonus_range": 12, "bonus_pick": 2
-    },
-    "Szybkie 600": {
-        "filename": "wyn600.pdf",
-        "range": 32, "pick": 6, "sum_min": 75, "sum_max": 125, "has_bonus": False
-    },
-    "Keno": {
-        "filename": "wynkeno.pdf",
-        "range": 70, "pick": 10, "sum_min": 200, "sum_max": 500, "has_bonus": False
-    },
-    "Mini Lotto": {
-        "filename": "wynmini.pdf",
-        "range": 42, "pick": 5, "sum_min": 85, "sum_max": 135, "has_bonus": False
-    },
-    "Ekstra Pensja": {
-        "filename": "wynpensja.pdf",
-        "range": 35, "pick": 5, "sum_min": 60, "sum_max": 120, 
-        "has_bonus": True, "bonus_range": 4, "bonus_pick": 1
-    }
-}
-
-# ==============================================================================
-# 5. READER PDF (OBSŁUGA OSOBNYCH PLIKÓW)
-# ==============================================================================
-
-def load_data_from_specific_pdf(selected_game):
+def parse_pdf_data(filename, range_max, pick_count):
     """
-    Pobiera nazwę pliku z konfiguracji i czyta go w całości.
+    Czyta liczby z pliku PDF.
+    - filename: nazwa pliku
+    - range_max: maksymalna liczba (50 lub 12)
+    - pick_count: ile liczb jest w jednym losowaniu (5 lub 2)
     """
-    config = GAME_CONFIG[selected_game]
-    filename = config["filename"]
-    
     if not os.path.exists(filename):
-        return [], f"BRAK PLIKU: {filename}. Wgraj go na GitHub."
-    
+        return [], False 
+        
     draws = []
-    
     try:
         with pdfplumber.open(filename) as pdf:
             full_text = ""
             for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    full_text += text + "\n"
-                
-        # Podział na linie
-        lines = full_text.split('\n')
+                txt = page.extract_text()
+                if txt: full_text += txt + "\n"
         
+        lines = full_text.split('\n')
         for line in lines:
             line = line.strip()
             if not line: continue
             
-            # Prosty parser: szukamy daty i liczb w linii
-            
-            # 1. Wyciągamy datę (opcjonalnie, do wyświetlania)
-            date_match = re.search(r'\d{2}\.\d{2}\.\d{4}', line)
-            date_str = date_match.group(0) if date_match else "Wynik"
-            
-            # 2. Czyścimy linię z daty, żeby nie pomylić roku z kulą
+            # Usuwamy datę (DD.MM.YYYY), żeby nie weszła jako liczba
             clean_line = re.sub(r'\d{2}\.\d{2}\.\d{4}', '', line)
             
-            # 3. Znajdź wszystkie liczby
-            numbers = [int(n) for n in re.findall(r'\b\d+\b', clean_line)]
+            # Szukamy liczb
+            nums = [int(n) for n in re.findall(r'\b\d+\b', clean_line)]
             
-            # 4. Filtrujemy liczby z zakresu gry (np. 1-49 dla Lotto)
-            valid_nums = [n for n in numbers if 1 <= n <= config["range"]]
+            # Filtrujemy (musi być w zakresie np. 1-50)
+            valid_nums = [n for n in nums if 1 <= n <= range_max]
             
-            # 5. Sprawdzamy czy linia ma sensowne dane (minimum liczb)
-            min_req = config["pick"]
-            # Dla Multi/Keno w PDF powinno być 20 liczb, mimo że gramy na 10
-            if selected_game in ["Multi Multi", "Keno"]:
-                min_req = 15 
-            
-            if len(valid_nums) >= min_req:
-                draws.append({
-                    "date": date_str,
-                    "numbers": valid_nums
-                })
-                    
-        if not draws:
-            return [], f"Plik {filename} jest pusty lub nie zawiera poprawnych liczb."
-            
-        return draws, None
-
-    except Exception as e:
-        return [], f"Błąd odczytu pliku {filename}: {str(e)}"
+            # Sprawdzamy czy mamy komplet liczb dla danego losowania
+            if len(valid_nums) >= pick_count:
+                # Bierzemy pierwsze X liczb (w razie gdyby w linii były jakieś śmieci)
+                draws.append(valid_nums[:pick_count])
+                
+        return draws, True
+        
+    except Exception:
+        return [], False
 
 # ==============================================================================
-# 6. ALGORYTM SMART (TREND 100 + DELTA + REPETITION)
+# 4. ALGORYTM SMART (TREND 50)
 # ==============================================================================
 
-def smart_generator_pdf(draws, game_name):
-    config = GAME_CONFIG[game_name]
-    population = list(range(1, config["range"] + 1))
+def generate_main_numbers(history):
+    """
+    Generuje 5 liczb z 50 (Baza 1).
+    Logika: Hot Numbers (ostatnie 50) + Filtry Statystyczne.
+    """
+    population = list(range(1, 51))
     
-    # --- LIMIT 100 NAJNOWSZYCH ---
-    # Zakładamy, że w PDF najnowsze są na górze (index 0) lub na dole.
-    # Zazwyczaj przy czytaniu PDF kolejność jest zachowana z góry na dół.
-    # Bierzemy pierwsze 100 wierszy (zakładając że wpisujesz od najnowszego na górze)
-    # Jeśli wpisujesz odwrotnie, algorytm i tak wyłapie częstotliwość.
-    analysis_data = draws[:100] if draws else []
+    # --- ZMIANA: Limit 50 ostatnich losowań ---
+    recent_history = history[:50] if history else []
     
-    # 1. WAGI (HOT NUMBERS)
-    weights = [1.0] * len(population)
-    if analysis_data:
-        all_nums = [n for d in analysis_data for n in d['numbers']]
-        counts = Counter(all_nums)
-        # Potęgowanie wzmacnia liczby częste
-        weights = [(counts.get(i, 0) + 1)**1.6 for i in population]
-
+    # 1. Analiza Wag (Częstotliwość)
+    weights = [1.0] * 50
+    if recent_history:
+        flat_list = [n for sublist in recent_history for n in sublist]
+        counts = Counter(flat_list)
+        # Wzmacniamy liczby częste potęgowaniem
+        weights = [(counts.get(i, 0) + 1)**1.7 for i in population]
+        
+    last_draw = recent_history[0] if recent_history else []
+    
+    # 2. Symulacja Monte Carlo
     best_set = []
     
-    # 2. POWTÓRKI (Z ostatniego dostępnego losowania)
-    last_draw_nums = analysis_data[0]['numbers'] if analysis_data else []
-    
-    # 3. SYMULACJA MONTE CARLO
     for _ in range(5000):
         candidates = set()
         
-        # A) MECHANIZM POWTÓRZEŃ
-        if game_name in ["Keno", "Multi Multi", "Szybkie 600"] and last_draw_nums:
-            if random.random() < 0.6: 
-                repeats = random.sample(last_draw_nums, k=random.randint(1, 2))
-                valid_repeats = [r for r in repeats if r in population]
-                candidates.update(valid_repeats[:2]) 
-
-        # B) RESZTA WAŻONA
-        while len(candidates) < config["pick"]:
+        # A) Prawo Serii (30% szans na powtórzenie 1 liczby z ostatniego losowania)
+        if last_draw and random.random() < 0.3:
+            candidates.add(random.choice(last_draw))
+            
+        # B) Losowanie Ważone (Hot Numbers)
+        while len(candidates) < 5:
             c = random.choices(population, weights=weights, k=1)[0]
             candidates.add(c)
-        
+            
         nums = sorted(list(candidates))
         
-        # FILTRY
-        # Delta (odstępy) - tylko dla małych zestawów
-        if config["pick"] <= 10:
-            deltas = [nums[i+1] - nums[i] for i in range(len(nums)-1)]
-            if all(d <= 2 for d in deltas): continue 
-            if all(d > 15 for d in deltas): continue 
+        # --- FILTRY (Sito) ---
         
-        # Suma (nie dla Keno/Multi)
-        if game_name not in ["Keno", "Multi Multi"]:
-            s_sum = sum(nums)
-            if not (config["sum_min"] <= s_sum <= config["sum_max"]): continue
-            
-        # Parzystość
+        # 1. Suma (Optimum dla 5/50 to 95-160)
+        s_sum = sum(nums)
+        if not (95 <= s_sum <= 160): continue
+        
+        # 2. Parzystość (Odrzucamy skrajności 5:0 i 0:5)
         even = sum(1 for n in nums if n % 2 == 0)
-        if even == 0 or even == config["pick"]: continue 
-            
-        # Ciągi
-        cons_groups = 0
-        current_seq = 0
-        max_seq = 0
-        for i in range(len(nums)-1):
-            if nums[i+1] == nums[i] + 1:
-                current_seq += 1
-            else:
-                if current_seq > 0: cons_groups += 1
-                current_seq = 0
-            max_seq = max(max_seq, current_seq)
-        if current_seq > 0: cons_groups += 1
+        if even == 0 or even == 5: continue
         
-        if max_seq >= 2: continue 
-        if cons_groups > 1: continue 
+        # 3. Delta (Odstępy między liczbami)
+        # Unikamy np. 1,2,3,4,5 (za ciasno) lub 1,15,30,45,50 (za luźno)
+        deltas = [nums[i+1] - nums[i] for i in range(4)]
+        if all(d <= 2 for d in deltas): continue 
+        if all(d > 20 for d in deltas): continue 
         
+        # Jeśli przeszedł filtry -> Mamy to!
         best_set = nums
         break
         
-    if not best_set: best_set = sorted(random.sample(population, config["pick"]))
+    if not best_set:
+        best_set = sorted(random.sample(population, 5))
         
-    special_set = []
-    if config["has_bonus"]:
-        bonus_pop = list(range(1, config["bonus_range"] + 1))
-        special_set = sorted(random.sample(bonus_pop, config["bonus_pick"]))
+    return best_set
+
+def generate_euro_numbers(history):
+    """
+    Generuje 2 liczby z 12 (Baza 2).
+    Logika: Hot Numbers (ostatnie 50).
+    """
+    population = list(range(1, 13))
+    
+    # --- ZMIANA: Limit 50 ostatnich losowań ---
+    recent_history = history[:50] if history else []
+    
+    weights = [1.0] * 12
+    if recent_history:
+        flat_list = [n for sublist in recent_history for n in sublist]
+        counts = Counter(flat_list)
+        # Dla małego zakresu (1-12) wagi są kluczowe
+        weights = [(counts.get(i, 0) + 1)**1.5 for i in population]
         
-    return best_set, special_set, len(analysis_data)
+    candidates = set()
+    while len(candidates) < 2:
+        c = random.choices(population, weights=weights, k=1)[0]
+        candidates.add(c)
+        
+    return sorted(list(candidates))
 
 # ==============================================================================
-# 7. INTERFEJS UŻYTKOWNIKA
+# 5. INTERFEJS UŻYTKOWNIKA
 # ==============================================================================
 
-tab_gen, tab_res = st.tabs(["🎰 GENERATOR", "📂 PODGLĄD PLIKU"])
+st.markdown("<h1>🇪🇺 EUROJACKPOT 777 🇪🇺</h1>", unsafe_allow_html=True)
+st.markdown("<h3>ALGORYTM TREND 50</h3>", unsafe_allow_html=True)
 
-# --- ZAKŁADKA 1: GENERATOR ---
-with tab_gen:
-    st.markdown("<h1 style='text-align: center;'>SALOON LOTTO 777</h1>", unsafe_allow_html=True)
-    
-    selected_game = st.selectbox("Wybierz grę:", list(GAME_CONFIG.keys()))
-    
-    # Pobieramy nazwę pliku do wyświetlenia
-    current_file = GAME_CONFIG[selected_game]['filename']
-    
-    col_l, col_c, col_r = st.columns([1, 2, 1])
-    with col_c:
+# --- SPRAWDZANIE PLIKÓW ---
+col1, col2 = st.columns(2)
+
+with col1:
+    main_draws, main_ok = parse_pdf_data("baza1.pdf", 50, 5)
+    # Bierzemy tylko 50 do analizy, ale wyświetlamy ile jest w pliku
+    draws_count_main = len(main_draws)
+    status_cls = "status-ok" if main_ok else "status-err"
+    status_txt = f"BAZA 1: {draws_count_main} WPISÓW" if main_ok else "BRAK PLIKU BAZA1.PDF"
+    st.markdown(f'<div class="file-status {status_cls}">{status_txt}</div>', unsafe_allow_html=True)
+
+with col2:
+    euro_draws, euro_ok = parse_pdf_data("baza2.pdf", 12, 2)
+    draws_count_euro = len(euro_draws)
+    status_cls = "status-ok" if euro_ok else "status-err"
+    status_txt = f"BAZA 2: {draws_count_euro} WPISÓW" if euro_ok else "BRAK PLIKU BAZA2.PDF"
+    st.markdown(f'<div class="file-status {status_cls}">{status_txt}</div>', unsafe_allow_html=True)
+
+# --- PRZYCISK GENERUJĄCY ---
+
+if st.button("🎰 OBLICZ SZCZĘŚLIWE LICZBY"):
+    if not main_ok or not euro_ok:
+        st.error("⚠️ BŁĄD KRYTYCZNY: Brakuje plików PDF. Wgraj 'baza1.pdf' i 'baza2.pdf'.")
+    else:
+        # Generowanie
+        with st.spinner("Analiza ostatnich 50 losowań..."):
+            lucky_main = generate_main_numbers(main_draws)
+            lucky_euro = generate_euro_numbers(euro_draws)
+        
+        # Wyświetlanie wyników
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Kontener na kule
+        html_main = "".join([f'<div class="ball-main">{n}</div>' for n in lucky_main])
+        html_euro = "".join([f'<div class="ball-euro">{n}</div>' for n in lucky_euro])
+        
         st.markdown(f"""
-        <div class="slot-machine">
-            <h2 style="margin:0;">{selected_game.upper()}</h2>
-            <p style="color:#aaa;">Źródło: {current_file}</p>
+        <div style="text-align: center;">
+            <div class="ball-container">
+                {html_main}
+            </div>
+            <div class="ball-container" style="justify-content: center; margin-top: 15px;">
+                {html_euro}
+            </div>
         </div>
         """, unsafe_allow_html=True)
         
+        # Statystyki użyte do obliczeń
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        if st.button("🤠 OBLICZ UKŁAD (PDF)", use_container_width=True):
-            
-            with st.spinner(f"Czytanie pliku {current_file}..."):
-                draws, error = load_data_from_specific_pdf(selected_game)
-            
-            if error:
-                st.error(error)
-                st.info(f"Upewnij się, że plik '{current_file}' jest wgrany na GitHub.")
-            else:
-                with st.spinner(f"Analiza {len(draws)} losowań..."):
-                    main_nums, spec_nums, count = smart_generator_pdf(draws, selected_game)
-                
-                st.markdown("<div style='text-align: center; margin-top: 20px;'>", unsafe_allow_html=True)
-                
-                html = ""
-                for n in main_nums:
-                    html += f"""<div class='ball'>{n}</div>"""
-                st.markdown(html, unsafe_allow_html=True)
-                
-                if spec_nums:
-                    st.markdown("<h3 style='margin:10px; color:#cd5c5c;'>+ BONUS +</h3>", unsafe_allow_html=True)
-                    html_spec = ""
-                    for n in spec_nums:
-                        html_spec += f"""<div class='ball ball-euro'>{n}</div>"""
-                    st.markdown(html_spec, unsafe_allow_html=True)
-                    
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                st.markdown("---")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Baza Danych", current_file)
-                c2.metric("Trend (Ilość)", f"Ostatnie {count}")
-                c3.metric("Suma Liczb", sum(main_nums))
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Analiza Trendu", "Ostatnie 50 gier")
+        c2.metric("Suma Głównych", sum(lucky_main))
+        c3.metric("Układ Parzystości", f"{sum(1 for n in lucky_main if n%2==0)} P / {sum(1 for n in lucky_main if n%2!=0)} NP")
 
-# --- ZAKŁADKA 2: PODGLĄD PLIKU ---
-with tab_res:
-    st.markdown("### 📂 ZAWARTOŚĆ PLIKÓW")
-    st.caption("Podgląd danych wczytanych z Twoich plików PDF.")
+# --- STOPKA ---
+st.markdown("""
+<div class="info-box">
+    Aplikacja działa w trybie offline na podstawie plików lokalnych.
+    Algorytm analizuje wyłącznie ostatnie 50 wyników, aby wykryć aktualne trendy.<br>
+    © 2026 EuroJackpot Analyzer
+</div>
+""", unsafe_allow_html=True)
     
-    view_game = st.selectbox("Pokaż zawartość pliku dla:", list(GAME_CONFIG.keys()), key="pdf_view")
-    target_file = GAME_CONFIG[view_game]['filename']
-    
-    if st.button(f"🔄 Wczytaj {target_file}"):
-        draws, error = load_data_from_specific_pdf(view_game)
-        
-        if error:
-            st.error(error)
-        else:
-            st.success(f"Znaleziono {len(draws)} wpisów w pliku {target_file}")
-            # Wyświetl 10 pierwszych z góry
-            for d in draws[:10]:
-                nums_str = ", ".join([str(n) for n in d['numbers']])
-                st.markdown(f"""
-                <div class="result-row">
-                    <div style="color: #e6b800; font-size: 0.8em;">📄 {d['date']}</div>
-                    <div style="font-size: 1.1em; font-weight: bold;">{nums_str}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-st.markdown("---")
-st.markdown("<div style='text-align: center; color: #888; font-size: 12px;'>Generator Szczęśliwych Cyfr © 2026 | By A.K #</div>", unsafe_allow_html=True)
-                
