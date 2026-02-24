@@ -25,39 +25,54 @@ EURO_MIN, EURO_MAX, EURO_PICK = 1, 12, 2
 
 
 # =========================================================
-# UI STYLE (dark + green accents)
+# UI STYLE (LIGHT BACKGROUND + GREEN ACCENTS + DARK TEXT)
 # =========================================================
-DARK_GREEN_CSS = """
+LIGHT_GREEN_CSS = """
 <style>
 :root{
-  --bg0:#050507;
-  --bg1:#0b0b10;
-  --card: rgba(16,16,24,0.92);
-  --card2: rgba(12,12,18,0.92);
-  --txt:#f4f4f6;
-  --mut:#b9b9c8;
-  --green:#00ff99;
-  --green2:#23ffb0;
-  --border: rgba(0,255,153,0.22);
-  --shadow: 0 14px 44px rgba(0,0,0,.65);
+  --bg0:#f3fbf7;
+  --bg1:#ffffff;
+  --card: rgba(255,255,255,0.96);
+  --card2: rgba(249,255,252,0.96);
+  --txt:#0b1b2b;         /* dark text */
+  --mut:#334155;         /* slate */
+  --green:#00a86b;       /* readable green */
+  --green2:#00c27a;
+  --border: rgba(0, 168, 107, 0.22);
+  --shadow: 0 10px 28px rgba(0,0,0,.08);
 }
 
+/* Global app background */
 .stApp{
   background:
-    radial-gradient(900px 600px at 10% 10%, rgba(0,255,153,0.12), transparent 55%),
-    radial-gradient(900px 600px at 90% 15%, rgba(0,255,153,0.06), transparent 50%),
+    radial-gradient(1100px 700px at 12% 10%, rgba(0, 194, 122, 0.12), transparent 58%),
+    radial-gradient(900px 600px at 92% 18%, rgba(0, 168, 107, 0.10), transparent 55%),
     linear-gradient(180deg, var(--bg0), var(--bg1));
   color: var(--txt) !important;
 }
 
-.block-container{ padding-top: 2.0rem; padding-bottom: 2.5rem; max-width: 1100px; }
+/* Make most text dark */
+html, body, [class*="css"]{
+  color: var(--txt) !important;
+}
 
-h1,h2,h3,h4{ letter-spacing: .4px; }
+.block-container{
+  padding-top: 2.0rem;
+  padding-bottom: 2.5rem;
+  max-width: 1100px;
+}
+
+h1,h2,h3,h4{
+  letter-spacing: .35px;
+  color: var(--txt) !important;
+}
+
 h1{
   font-family: ui-serif, Georgia, "Times New Roman", serif;
   text-transform: uppercase;
 }
 
+/* Cards */
 .gg-card{
   background: linear-gradient(180deg, var(--card), var(--card2));
   border: 1px solid var(--border);
@@ -66,63 +81,77 @@ h1{
   padding: 16px 16px 12px 16px;
 }
 
+/* Pills */
 .gg-pill{
   display:inline-block;
   padding: 6px 10px;
   margin: 3px 4px 0 0;
   border-radius: 999px;
-  border: 1px solid rgba(0,255,153,0.28);
-  background: rgba(0,255,153,0.08);
+  border: 1px solid rgba(0, 168, 107, 0.28);
+  background: rgba(0, 168, 107, 0.10);
   font-weight: 900;
-  color: #dfffee;
+  color: #064e3b; /* dark green text */
 }
 
-.gg-muted{ opacity: .80; font-size: .92rem; }
+/* Muted */
+.gg-muted{
+  opacity: .82;
+  font-size: .92rem;
+  color: var(--mut) !important;
+}
 
+/* Sidebar */
 section[data-testid="stSidebar"]{
-  background: linear-gradient(180deg, rgba(0,255,153,0.10) 0%, rgba(0,0,0,0.20) 100%);
-  border-right: 1px solid rgba(0,255,153,0.12);
+  background: linear-gradient(180deg, rgba(0, 194, 122, 0.10) 0%, rgba(255,255,255,0.60) 100%);
+  border-right: 1px solid rgba(0, 168, 107, 0.16);
 }
 
+/* Inputs */
 div[data-baseweb="select"] > div,
 div[data-baseweb="input"] > div,
 div[data-baseweb="textarea"] > div{
   border-radius: 14px !important;
 }
 
+/* Primary button */
 div.stButton > button[kind="primary"]{
-  background: linear-gradient(90deg, #00ff99 0%, #23ffb0 100%) !important;
-  color: #000000 !important;
+  background: linear-gradient(90deg, var(--green) 0%, var(--green2) 100%) !important;
+  color: #052e16 !important;
   border: 0 !important;
   border-radius: 14px !important;
   padding: 0.80rem 1.10rem !important;
   font-weight: 1000 !important;
   letter-spacing: .6px !important;
-  box-shadow: 0 12px 26px rgba(0,255,153,0.18) !important;
+  box-shadow: 0 10px 22px rgba(0, 168, 107, 0.18) !important;
 }
 div.stButton > button[kind="primary"]:hover{
-  filter: brightness(1.04);
+  filter: brightness(1.03);
   transform: translateY(-1px);
 }
 
-div.stButton > button{
-  border-radius: 14px !important;
-}
-
+/* Row result card */
 .gg-row{
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(0,255,153,0.18);
+  background: rgba(0, 168, 107, 0.06);
+  border: 1px solid rgba(0, 168, 107, 0.18);
   border-radius: 14px;
   padding: 10px 12px;
   margin: 8px 0;
+  color: var(--txt) !important;
 }
 
+/* Dataframe */
 [data-testid="stDataFrame"]{
   border-radius: 16px !important;
   overflow: hidden !important;
-  border: 1px solid rgba(0,255,153,0.22) !important;
+  border: 1px solid rgba(0, 168, 107, 0.22) !important;
 }
 
+/* Make captions readable */
+small, .stCaption, [data-testid="stCaptionContainer"]{
+  color: rgba(51,65,85,0.95) !important;
+}
+
+/* Mobile */
 @media (max-width: 640px){
   .block-container{ padding-left: 1rem; padding-right: 1rem; }
   div.stButton > button[kind="primary"]{ width: 100% !important; }
@@ -303,7 +332,7 @@ def generate_tickets_with_smart(
 
 
 # =========================================================
-# NEW: "Twoje cyfry dnia" logic
+# "Twoje cyfry dnia" logic
 # =========================================================
 def flatten_last_n(draws: List[List[int]], n: int) -> List[int]:
     return [x for d in draws[:n] for x in d]
@@ -314,27 +343,19 @@ def parity_bias_from_last_n(draws: List[List[int]], n: int) -> str:
     ev = sum(1 for x in nums if x % 2 == 0)
     od = len(nums) - ev
     if ev > od:
-        return "ODD"   # dziś preferuj nieparzyste
+        return "ODD"   # preferuj nieparzyste
     if od > ev:
-        return "EVEN"  # dziś preferuj parzyste
+        return "EVEN"  # preferuj parzyste
     return "ANY"
 
 
 def high_low_bias_from_last_two(draws: List[List[int]], threshold: int) -> str:
-    """
-    If last two draws are mostly low -> prefer HIGH today.
-    If last two draws are mostly high -> prefer LOW today.
-    Else ANY.
-    """
     if len(draws) < 2:
         return "ANY"
-
     last2 = draws[:2]
     all_nums = [x for d in last2 for x in d]
     low = sum(1 for x in all_nums if x <= threshold)
     high = len(all_nums) - low
-
-    # If clear majority low -> switch to high; vice versa
     if low >= high + 2:
         return "HIGH"
     if high >= low + 2:
@@ -356,24 +377,16 @@ def pick_daily_set_from_hot(
     pick_count: int,
     nmin: int,
     nmax: int,
-    prefer_parity: str,     # "EVEN" | "ODD" | "ANY"
-    prefer_level: str,      # "LOW" | "HIGH" | "ANY"
+    prefer_parity: str,
+    prefer_level: str,
     threshold: int,
     target_spread: Optional[float] = None,
     max_attempts: int = 400
 ) -> List[int]:
-    """
-    Picks numbers primarily from HOT, but filters by:
-    - parity preference (if possible)
-    - high/low preference (if possible)
-    - tries to match a 'spread' feel (difference max-min) if target_spread given
-    """
     hot_unique = sorted(set([x for x in hot if nmin <= x <= nmax]))
     if len(hot_unique) < pick_count:
-        # fallback: extend pool with whole range
         hot_unique = hot_unique + [x for x in range(nmin, nmax + 1) if x not in hot_unique]
 
-    # Build filtered pools
     pool = hot_unique[:]
 
     if prefer_level != "ANY":
@@ -384,13 +397,11 @@ def pick_daily_set_from_hot(
         if len(filtered) >= pick_count:
             pool = filtered
 
-    # Parity preference should not kill the pool entirely; we apply softly
     if prefer_parity != "ANY":
         if prefer_parity == "EVEN":
             filtered = [x for x in pool if x % 2 == 0]
         else:
             filtered = [x for x in pool if x % 2 == 1]
-        # if we can still pick enough, use it; else keep previous pool
         if len(filtered) >= pick_count:
             pool = filtered
 
@@ -399,8 +410,6 @@ def pick_daily_set_from_hot(
 
     for _ in range(max_attempts):
         candidate = sorted(random.sample(pool, pick_count))
-
-        # Score: spread closeness + parity match + level match
         spread = (candidate[-1] - candidate[0]) if candidate else 0
         score = 0.0
 
@@ -409,26 +418,18 @@ def pick_daily_set_from_hot(
 
         if prefer_parity != "ANY":
             ev, od = even_odd_split(candidate)
-            if prefer_parity == "EVEN":
-                score += ev * 0.35
-            else:
-                score += od * 0.35
+            score += (ev * 0.35) if prefer_parity == "EVEN" else (od * 0.35)
 
         if prefer_level != "ANY":
             low = sum(1 for x in candidate if x <= threshold)
             high = pick_count - low
-            if prefer_level == "LOW":
-                score += low * 0.25
-            else:
-                score += high * 0.25
+            score += (high * 0.25) if prefer_level == "HIGH" else (low * 0.25)
 
         if score > best_score:
             best_score = score
             best = candidate
 
-        # If it strongly satisfies parity + level, we can accept early
         if prefer_parity != "ANY" and prefer_level != "ANY":
-            # Accept if majority aligns
             ev, od = even_odd_split(candidate)
             low = sum(1 for x in candidate if x <= threshold)
             high = pick_count - low
@@ -450,7 +451,7 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded"
     )
-    st.markdown(DARK_GREEN_CSS, unsafe_allow_html=True)
+    st.markdown(LIGHT_GREEN_CSS, unsafe_allow_html=True)
 
     st.title(APP_TITLE)
     st.write("Generator typowań Eurojackpot na bazie historii losowań z dwóch plików PDF:")
@@ -572,7 +573,6 @@ def main():
         st.dataframe(freq_euro, use_container_width=True, hide_index=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Groups
     hot_main, cold_main, _ = build_groups(freq_main, MAIN_MIN, MAIN_MAX, hot_main_size, cold_main_size)
     hot_euro, cold_euro, _ = build_groups(freq_euro, EURO_MIN, EURO_MAX, hot_euro_size, cold_euro_size)
 
@@ -603,9 +603,6 @@ def main():
 
     st.divider()
 
-    # =========================================================
-    # BUTTONS: Generator + "Twoje cyfry dnia"
-    # =========================================================
     st.markdown('<div class="gg-card">', unsafe_allow_html=True)
     st.subheader("🎟️ Eurojackpot — generowanie kuponów")
 
@@ -615,9 +612,7 @@ def main():
     with col_btn2:
         daily = st.button("🌿 TWOJE CYFRY DNIA", type="primary", use_container_width=True)
 
-    # -----------------------------------------
-    # Helper: create one ticket based on chosen mode
-    # -----------------------------------------
+    # Mode mapping
     if mode_ui == "Hybryda 70/20/10 (hot/cold/mix)":
         base_mode_kind = "hybrid"
     elif mode_ui == "Tylko 🔥 gorące":
@@ -638,9 +633,6 @@ def main():
 
         return {"Typ": chosen, "Main": main_nums, "Euro": euro_nums}
 
-    # -----------------------------------------
-    # ACTION 1: Standard generator
-    # -----------------------------------------
     if generate:
         if not smart_enabled:
             records = [make_one_ticket() for _ in range(int(n_tickets))]
@@ -681,7 +673,6 @@ def main():
                 unsafe_allow_html=True
             )
 
-        # EXPORTS
         df_out = pd.DataFrame({
             "Typ": [r["Typ"] for r in records],
             "5_50": [" ".join(f"{x:02d}" for x in r["Main"]) for r in records],
@@ -745,21 +736,15 @@ def main():
 
         st.caption("Uwaga: to generator analityczno-rozrywkowy — historia losowań nie gwarantuje wygranej.")
 
-    # -----------------------------------------
-    # ACTION 2: "Twoje cyfry dnia"
-    # -----------------------------------------
     if daily:
-        # MAIN (5/50) analysis from last 10
         main_parity_pref = parity_bias_from_last_n(draws_main, 10)
         main_level_pref = high_low_bias_from_last_two(draws_main, threshold=25)
         main_target_spread = avg_spread_last_n(draws_main, 10)
 
-        # EURO (2/12) analysis from last 10
         euro_parity_pref = parity_bias_from_last_n(draws_euro, 10)
         euro_level_pref = high_low_bias_from_last_two(draws_euro, threshold=6)
         euro_target_spread = avg_spread_last_n(draws_euro, 10)
 
-        # Translate parity preference for picker
         def pref_to_text(p: str) -> str:
             if p == "EVEN":
                 return "parzyste"
@@ -774,8 +759,6 @@ def main():
                 return "wyższe"
             return "dowolnie"
 
-        # Generate "daily" picks from HOT pools with preferences
-        # MAIN: pick 5 from hot_main
         daily_main = pick_daily_set_from_hot(
             hot=hot_main,
             pick_count=MAIN_PICK,
@@ -788,7 +771,6 @@ def main():
             max_attempts=500
         )
 
-        # EURO: pick 2 from hot_euro
         daily_euro = pick_daily_set_from_hot(
             hot=hot_euro,
             pick_count=EURO_PICK,
@@ -817,22 +799,20 @@ def main():
 
         st.markdown("#### Jak aplikacja to ustaliła?")
         st.markdown(
-            f"- Ostatnie 10 losowań (5/50): częściej wypadały **{pref_to_text(main_parity_pref)}** → dziś preferencja: **{pref_to_text(main_parity_pref)}** (odwrócona logika jest „wbudowana” w dobór)."
+            f"- Ostatnie 10 losowań (5/50): analiza parzystości → preferencja dziś: **{pref_to_text(main_parity_pref)}** (dobór z puli gorących)."
         )
         st.markdown(
-            f"- Ostatnie 2 losowania (5/50) były bardziej **{level_to_text(main_level_pref)}** → dziś preferujemy **{level_to_text(main_level_pref)}** z puli gorących."
+            f"- Ostatnie 2 losowania (5/50) były bardziej **{level_to_text(main_level_pref)}** → dziś preferujemy **{level_to_text(main_level_pref)}** z gorących."
         )
         st.markdown(
-            f"- Różnice (spread) w ostatnich 10 losowaniach (5/50) średnio: **{main_target_spread:.1f}** → kupon dnia próbuje trzymać podobny „rozstrzał”."
+            f"- Średni „rozstrzał” (max-min) w ostatnich 10 losowaniach (5/50): **{main_target_spread:.1f}**."
         )
-
         st.markdown(
-            f"- Ostatnie 10 losowań (2/12): preferencja parzystości: **{pref_to_text(euro_parity_pref)}**, trend niskie/wysokie: **{level_to_text(euro_level_pref)}**."
+            f"- 2/12: parzystość **{pref_to_text(euro_parity_pref)}**, trend niskie/wysokie **{level_to_text(euro_level_pref)}**."
         )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Diagnostics
     with st.expander("📌 Diagnostyka (TOP/LOW)"):
         st.write("TOP 15 (5/50):")
         st.dataframe(freq_main.head(15), use_container_width=True, hide_index=True)
