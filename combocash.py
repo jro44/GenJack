@@ -33,7 +33,7 @@ except Exception:
 # =========================================================
 APP_TITLE = "⚽ EuroVictory — Eurojackpot 5/50 + 2/12"
 PDF_MAIN_FILENAME = "wyniki1ej.pdf"   # main numbers 5/50
-PDF_EURO_FILENAME = "wyniki2ej.pdf"     # euro numbers 2/12
+PDF_EURO_FILENAME = "wyniki2ej.pdf"   # euro numbers 2/12
 
 MAIN_MIN = 1
 MAIN_MAX = 50
@@ -59,20 +59,15 @@ FOOTBALL_CSS = """
   --grass1:#2f9e44;
   --grass2:#2b8a3e;
   --grass3:#37b24d;
-  --line:#f8f9fa;
   --card:#ffffffee;
   --card2:#f8fff8f2;
   --txt:#000000;
   --mut:#1f2937;
-  --green:#2f9e44;
-  --green2:#69db7c;
-  --border: rgba(255,255,255,0.28);
   --shadow: 0 12px 28px rgba(0,0,0,.16);
 }
 
 .stApp{
   background:
-    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.16) 0 2px, transparent 2px),
     linear-gradient(90deg,
       rgba(255,255,255,0.18) 0%,
       rgba(255,255,255,0.18) 0.6%,
@@ -252,72 +247,115 @@ def _read_pdf_pages_text(pdf_bytes: bytes) -> List[str]:
 
 
 # =========================================================
-# PARSER 5/50
+# TOKEN PARSERS — ROBUST FOR YOUR PDF STRUCTURE
 # =========================================================
-LINE_5NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s*$")
-DRAWNO_LINE = re.compile(r"^\s*(\d{4,5})\s*$")
-
-def _extract_main_draws_and_drawnos_from_pages(pages: List[str]) -> Tuple[List[List[int]], List[int]]:
-    draws: List[List[int]] = []
+def _extract_tokens_and_drawnos_main_from_pages(pages: List[str]) -> Tuple[List[int], List[int]]:
+    """
+    For 5/50:
+    - collect all numbers 1..50 from top parts of pages
+    - when page reaches draw numbers section (>=1000), collect draw numbers
+    """
+    tokens: List[int] = []
     drawnos: List[int] = []
 
     for page_text in pages:
         lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
+        in_drawno_section = False
 
         for ln in lines:
             if "Eurojackpot" in ln and "5/50" in ln:
                 continue
-            if "multipasko" in ln.lower():
+
+            ints = [int(x) for x in INT_RE.findall(ln)]
+            if not ints:
                 continue
 
-            m5 = LINE_5NUM.match(ln)
-            if m5:
-                nums = [int(m5.group(i)) for i in range(1, 6)]
-                if len(set(nums)) == 5 and all(MAIN_MIN <= x <= MAIN_MAX for x in nums):
-                    draws.append(sorted(nums))
-                continue
+            if any(x >= DRAWNO_MIN for x in ints):
+                in_drawno_section = True
 
-            md = DRAWNO_LINE.match(ln)
-            if md:
-                dno = int(md.group(1))
-                if DRAWNO_MIN <= dno < 100000:
-                    drawnos.append(dno)
+            if in_drawno_section:
+                for x in ints:
+                    if DRAWNO_MIN <= x < 100000:
+                        drawnos.append(x)
+            else:
+                for x in ints:
+                    if MAIN_MIN <= x <= MAIN_MAX:
+                        tokens.append(x)
 
-    return draws, drawnos
+    return tokens, drawnos
 
 
-# =========================================================
-# PARSER 2/12
-# =========================================================
-LINE_2NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s*$")
-
-def _extract_euro_draws_and_drawnos_from_pages(pages: List[str]) -> Tuple[List[List[int]], List[int]]:
-    draws: List[List[int]] = []
+def _extract_tokens_and_drawnos_euro_from_pages(pages: List[str]) -> Tuple[List[int], List[int]]:
+    """
+    For 2/12:
+    - collect all numbers 1..12 from top parts of pages
+    - when page reaches draw numbers section (>=1000), collect draw numbers
+    """
+    tokens: List[int] = []
     drawnos: List[int] = []
 
     for page_text in pages:
         lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
+        in_drawno_section = False
 
         for ln in lines:
             if "Eurojackpot" in ln and "2/12" in ln:
                 continue
-            if "multipasko" in ln.lower():
+
+            ints = [int(x) for x in INT_RE.findall(ln)]
+            if not ints:
                 continue
 
-            m2 = LINE_2NUM.match(ln)
-            if m2:
-                nums = [int(m2.group(1)), int(m2.group(2))]
-                if len(set(nums)) == 2 and all(EURO_MIN <= x <= EURO_MAX for x in nums):
-                    draws.append(sorted(nums))
-                continue
+            if any(x >= DRAWNO_MIN for x in ints):
+                in_drawno_section = True
 
-            md = DRAWNO_LINE.match(ln)
-            if md:
-                dno = int(md.group(1))
-                if DRAWNO_MIN <= dno < 100000:
-                    drawnos.append(dno)
+            if in_drawno_section:
+                for x in ints:
+                    if DRAWNO_MIN <= x < 100000:
+                        drawnos.append(x)
+            else:
+                for x in ints:
+                    if EURO_MIN <= x <= EURO_MAX:
+                        tokens.append(x)
 
-    return draws, drawnos
+    return tokens, drawnos
+
+
+def _chunk_tokens(tokens: List[int], pick_count: int, num_min: int, num_max: int) -> List[List[int]]:
+    if len(tokens) < pick_count:
+        return []
+
+    if len(tokens) % pick_count == 0:
+        draws = []
+        for i in range(0, len(tokens), pick_count):
+            d = tokens[i:i + pick_count]
+            draws.append(sorted(d))
+        return draws
+
+    best = []
+    best_valid = -1
+
+    for offset in range(pick_count):
+        t = tokens[offset:]
+        if len(t) < pick_count:
+            continue
+
+        cut = (len(t) // pick_count) * pick_count
+        t = t[:cut]
+
+        draws = []
+        valid = 0
+        for i in range(0, len(t), pick_count):
+            d = t[i:i + pick_count]
+            if len(set(d)) == pick_count and all(num_min <= n <= num_max for n in d):
+                valid += 1
+            draws.append(sorted(d))
+
+        if valid > best_valid:
+            best_valid = valid
+            best = draws
+
+    return best
 
 
 # =========================================================
@@ -328,8 +366,16 @@ def load_eurojackpot_records_cached(pdf_main_bytes: bytes, pdf_euro_bytes: bytes
     main_pages = _read_pdf_pages_text(pdf_main_bytes)
     euro_pages = _read_pdf_pages_text(pdf_euro_bytes)
 
-    main_draws, main_drawnos = _extract_main_draws_and_drawnos_from_pages(main_pages)
-    euro_draws, euro_drawnos = _extract_euro_draws_and_drawnos_from_pages(euro_pages)
+    main_tokens, main_drawnos = _extract_tokens_and_drawnos_main_from_pages(main_pages)
+    euro_tokens, euro_drawnos = _extract_tokens_and_drawnos_euro_from_pages(euro_pages)
+
+    main_draws = _chunk_tokens(main_tokens, MAIN_PICK_COUNT, MAIN_MIN, MAIN_MAX)
+    euro_draws = _chunk_tokens(euro_tokens, EURO_PICK_COUNT, EURO_MIN, EURO_MAX)
+
+    if not main_draws:
+        raise RuntimeError("Nie udało się wyciągnąć wyników 5/50 z pliku głównego.")
+    if not euro_draws:
+        raise RuntimeError("Nie udało się wyciągnąć wyników 2/12 z pliku dodatkowego.")
 
     n_main = min(len(main_draws), len(main_drawnos))
     n_euro = min(len(euro_draws), len(euro_drawnos))
@@ -752,7 +798,7 @@ def main():
 
     st.title(APP_TITLE)
     st.write("Generator typowań Eurojackpot na bazie prawdziwych wyników z dwóch plików PDF: 5/50 i 2/12.")
-    st.caption("Motyw boiska piłkarskiego + płynny interfejs: cache, szybkie czytanie PDF, brak niepotrzebnych przeliczeń.")
+    st.caption("Parser poprawiony pod strukturę Twoich PDF-ów: tokeny są zbierane sekwencyjnie i dzielone odpowiednio co 5 i co 2, a potem łączone po numerze losowania.")
 
     if "last_records" not in st.session_state:
         st.session_state["last_records"] = []
@@ -771,7 +817,7 @@ def main():
     st.write(f"Plik główny 5/50: `{pdf_main_path}`")
     st.write(f"Plik dodatkowy 2/12: `{pdf_euro_path}`")
     st.write(f"Silnik PDF: **{'PyMuPDF (fitz)' if HAS_PYMUPDF else 'pypdf (fallback)'}**")
-    st.markdown('<div class="v-muted">Numery losowań są łączone po zgodnym numerze losowania z obu PDF-ów.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="v-muted">Dane są łączone po tym samym numerze losowania z obu plików.</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     if not pdf_main_path.exists():
@@ -1019,13 +1065,7 @@ def main():
 
         st.session_state["last_daily"] = {
             "main": daily_main,
-            "euro": daily_euro,
-            "prefer_parity_main": prefer_parity_main,
-            "prefer_level_main": prefer_level_main,
-            "target_spread_main": target_spread_main,
-            "prefer_parity_euro": prefer_parity_euro,
-            "prefer_level_euro": prefer_level_euro,
-            "target_spread_euro": target_spread_euro
+            "euro": daily_euro
         }
 
     if st.session_state["show_results"]:
@@ -1068,11 +1108,6 @@ def main():
             f'<span class="v-muted"> | z ostatnich {cfg["history_window"]} losowań</span></div>',
             unsafe_allow_html=True
         )
-        st.markdown("#### Jak to działa?")
-        st.markdown(
-            "Aplikacja liczy częstotliwość osobno dla puli głównej 5/50 i osobno dla puli dodatkowej 2/12, "
-            "a następnie wybiera po prostu najczęściej występujące liczby z prawdziwych historycznych losowań."
-        )
 
         hot_set_filename_input = st.text_input("Nazwa pliku HOT SET .txt (np. euro_hot_set.txt)", value="euro_hot_set.txt")
         safe_hot_name = sanitize_txt_filename(hot_set_filename_input)
@@ -1089,18 +1124,13 @@ def main():
         main_str = " ".join(f"{x:02d}" for x in info["main"])
         euro_str = " ".join(f"{x:02d}" for x in info["euro"])
 
-        ev_main, od_main = even_odd_split(info["main"])
-        ev_euro, od_euro = even_odd_split(info["euro"])
-
         st.markdown("### 🌿 Twoje cyfry dnia — Eurojackpot")
         st.markdown(
-            f'<div class="v-row"><b>Main 5/50</b> — {main_str} '
-            f'<span class="v-muted"> | parzyste/nieparzyste: {ev_main}/{od_main}</span></div>',
+            f'<div class="v-row"><b>Main 5/50</b> — {main_str}</div>',
             unsafe_allow_html=True
         )
         st.markdown(
-            f'<div class="v-row"><b>Euro 2/12</b> — {euro_str} '
-            f'<span class="v-muted"> | parzyste/nieparzyste: {ev_euro}/{od_euro}</span></div>',
+            f'<div class="v-row"><b>Euro 2/12</b> — {euro_str}</div>',
             unsafe_allow_html=True
         )
 
@@ -1122,17 +1152,9 @@ def main():
             euro_str = df_out.iloc[i]["Euro 2/12"]
             typ = df_out.iloc[i]["Typ"]
 
-            t_main = [int(x) for x in main_str.split()]
-            t_euro = [int(x) for x in euro_str.split()]
-
-            ev_main, od_main = even_odd_split(t_main)
-            ev_euro, od_euro = even_odd_split(t_euro)
-
             st.markdown(
                 f'<div class="v-row"><b>Kupon #{i+1:03d}</b> '
-                f'<span class="v-muted">[{typ}]</span> — '
-                f'Main: {main_str} | Euro: {euro_str} '
-                f'<span class="v-muted"> | Main parzyste/nieparzyste: {ev_main}/{od_main} | Euro: {ev_euro}/{od_euro}</span></div>',
+                f'<span class="v-muted">[{typ}]</span> — Main: {main_str} | Euro: {euro_str}</div>',
                 unsafe_allow_html=True
             )
 
