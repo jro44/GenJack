@@ -33,7 +33,7 @@ except Exception:
 # =========================================================
 APP_TITLE = "⚽ EuroVictory — Eurojackpot 5/50 + 2/12"
 PDF_MAIN_FILENAME = "wyniki1ej.pdf"   # main numbers 5/50
-PDF_EURO_FILENAME = "wyniki2.pdf"     # euro numbers 2/12
+PDF_EURO_FILENAME = "wyniki2ej.pdf"     # euro numbers 2/12
 
 MAIN_MIN = 1
 MAIN_MAX = 50
