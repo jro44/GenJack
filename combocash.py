@@ -32,8 +32,8 @@ except Exception:
 # APP CONFIG
 # =========================================================
 APP_TITLE = "⚽ EuroVictory — Eurojackpot 5/50 + 2/12"
-PDF_MAIN_FILENAME = "wyniki1ej.pdf"   # main numbers 5/50
-PDF_EURO_FILENAME = "wyniki2ej.pdf"   # euro numbers 2/12
+PDF_MAIN_FILENAME = "wyniki1ej.pdf"
+PDF_EURO_FILENAME = "wyniki2ej.pdf"
 
 MAIN_MIN = 1
 MAIN_MAX = 50
@@ -42,8 +42,6 @@ MAIN_PICK_COUNT = 5
 EURO_MIN = 1
 EURO_MAX = 12
 EURO_PICK_COUNT = 2
-
-DRAWNO_MIN = 1000
 
 HYBRID_HOT_P = 0.70
 HYBRID_COLD_P = 0.20
@@ -163,6 +161,7 @@ div.stButton > button[kind="primary"]{
   letter-spacing: .6px !important;
   box-shadow: 0 10px 22px rgba(0,0,0,0.15) !important;
 }
+
 div.stButton > button[kind="primary"]:hover{
   filter: brightness(1.03);
   transform: translateY(-1px);
@@ -181,10 +180,8 @@ button[kind="header"]{
 
 
 # =========================================================
-# GENERIC PDF HELPERS
+# PDF READERS
 # =========================================================
-INT_RE = re.compile(r"\d+")
-
 def _validate_pdf_bytes(pdf_bytes: bytes) -> None:
     if not pdf_bytes.startswith(b"%PDF"):
         head = pdf_bytes[:240].decode("utf-8", errors="replace")
@@ -247,115 +244,82 @@ def _read_pdf_pages_text(pdf_bytes: bytes) -> List[str]:
 
 
 # =========================================================
-# TOKEN PARSERS — ROBUST FOR YOUR PDF STRUCTURE
+# STRICT LINE PARSERS
+# Kluczowa poprawka:
+# - draw number = tylko linia dokładnie 4 cyfry
+# - ignorujemy footer www.multipasko / 2004-2026
 # =========================================================
-def _extract_tokens_and_drawnos_main_from_pages(pages: List[str]) -> Tuple[List[int], List[int]]:
-    """
-    For 5/50:
-    - collect all numbers 1..50 from top parts of pages
-    - when page reaches draw numbers section (>=1000), collect draw numbers
-    """
-    tokens: List[int] = []
+LINE_5NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s*$")
+LINE_2NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s*$")
+LINE_DRAWNO = re.compile(r"^\s*(\d{4})\s*$")
+
+def _should_skip_line(ln: str) -> bool:
+    low = ln.lower()
+    if not ln.strip():
+        return True
+    if "multipasko" in low:
+        return True
+    if "eurojackpot 5/50" in low:
+        return True
+    if "eurojackpot 2/12" in low:
+        return True
+    if "mapy liczbowe lotto" in low:
+        return True
+    if "©" in ln:
+        return True
+    return False
+
+def _extract_main_records_from_pages(pages: List[str]) -> List[Dict]:
+    draws: List[List[int]] = []
     drawnos: List[int] = []
 
     for page_text in pages:
         lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
-        in_drawno_section = False
 
         for ln in lines:
-            if "Eurojackpot" in ln and "5/50" in ln:
+            if _should_skip_line(ln):
                 continue
 
-            ints = [int(x) for x in INT_RE.findall(ln)]
-            if not ints:
+            m5 = LINE_5NUM.match(ln)
+            if m5:
+                nums = [int(m5.group(i)) for i in range(1, 6)]
+                if len(set(nums)) == 5 and all(MAIN_MIN <= x <= MAIN_MAX for x in nums):
+                    draws.append(sorted(nums))
                 continue
 
-            if any(x >= DRAWNO_MIN for x in ints):
-                in_drawno_section = True
+            md = LINE_DRAWNO.match(ln)
+            if md:
+                dno = int(md.group(1))
+                drawnos.append(dno)
 
-            if in_drawno_section:
-                for x in ints:
-                    if DRAWNO_MIN <= x < 100000:
-                        drawnos.append(x)
-            else:
-                for x in ints:
-                    if MAIN_MIN <= x <= MAIN_MAX:
-                        tokens.append(x)
+    n = min(len(draws), len(drawnos))
+    return [{"draw_no": drawnos[i], "main_nums": draws[i]} for i in range(n)]
 
-    return tokens, drawnos
-
-
-def _extract_tokens_and_drawnos_euro_from_pages(pages: List[str]) -> Tuple[List[int], List[int]]:
-    """
-    For 2/12:
-    - collect all numbers 1..12 from top parts of pages
-    - when page reaches draw numbers section (>=1000), collect draw numbers
-    """
-    tokens: List[int] = []
+def _extract_euro_records_from_pages(pages: List[str]) -> List[Dict]:
+    draws: List[List[int]] = []
     drawnos: List[int] = []
 
     for page_text in pages:
         lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
-        in_drawno_section = False
 
         for ln in lines:
-            if "Eurojackpot" in ln and "2/12" in ln:
+            if _should_skip_line(ln):
                 continue
 
-            ints = [int(x) for x in INT_RE.findall(ln)]
-            if not ints:
+            m2 = LINE_2NUM.match(ln)
+            if m2:
+                nums = [int(m2.group(1)), int(m2.group(2))]
+                if len(set(nums)) == 2 and all(EURO_MIN <= x <= EURO_MAX for x in nums):
+                    draws.append(sorted(nums))
                 continue
 
-            if any(x >= DRAWNO_MIN for x in ints):
-                in_drawno_section = True
+            md = LINE_DRAWNO.match(ln)
+            if md:
+                dno = int(md.group(1))
+                drawnos.append(dno)
 
-            if in_drawno_section:
-                for x in ints:
-                    if DRAWNO_MIN <= x < 100000:
-                        drawnos.append(x)
-            else:
-                for x in ints:
-                    if EURO_MIN <= x <= EURO_MAX:
-                        tokens.append(x)
-
-    return tokens, drawnos
-
-
-def _chunk_tokens(tokens: List[int], pick_count: int, num_min: int, num_max: int) -> List[List[int]]:
-    if len(tokens) < pick_count:
-        return []
-
-    if len(tokens) % pick_count == 0:
-        draws = []
-        for i in range(0, len(tokens), pick_count):
-            d = tokens[i:i + pick_count]
-            draws.append(sorted(d))
-        return draws
-
-    best = []
-    best_valid = -1
-
-    for offset in range(pick_count):
-        t = tokens[offset:]
-        if len(t) < pick_count:
-            continue
-
-        cut = (len(t) // pick_count) * pick_count
-        t = t[:cut]
-
-        draws = []
-        valid = 0
-        for i in range(0, len(t), pick_count):
-            d = t[i:i + pick_count]
-            if len(set(d)) == pick_count and all(num_min <= n <= num_max for n in d):
-                valid += 1
-            draws.append(sorted(d))
-
-        if valid > best_valid:
-            best_valid = valid
-            best = draws
-
-    return best
+    n = min(len(draws), len(drawnos))
+    return [{"draw_no": drawnos[i], "euro_nums": draws[i]} for i in range(n)]
 
 
 # =========================================================
@@ -366,28 +330,13 @@ def load_eurojackpot_records_cached(pdf_main_bytes: bytes, pdf_euro_bytes: bytes
     main_pages = _read_pdf_pages_text(pdf_main_bytes)
     euro_pages = _read_pdf_pages_text(pdf_euro_bytes)
 
-    main_tokens, main_drawnos = _extract_tokens_and_drawnos_main_from_pages(main_pages)
-    euro_tokens, euro_drawnos = _extract_tokens_and_drawnos_euro_from_pages(euro_pages)
+    main_records = _extract_main_records_from_pages(main_pages)
+    euro_records = _extract_euro_records_from_pages(euro_pages)
 
-    main_draws = _chunk_tokens(main_tokens, MAIN_PICK_COUNT, MAIN_MIN, MAIN_MAX)
-    euro_draws = _chunk_tokens(euro_tokens, EURO_PICK_COUNT, EURO_MIN, EURO_MAX)
-
-    if not main_draws:
+    if not main_records:
         raise RuntimeError("Nie udało się wyciągnąć wyników 5/50 z pliku głównego.")
-    if not euro_draws:
+    if not euro_records:
         raise RuntimeError("Nie udało się wyciągnąć wyników 2/12 z pliku dodatkowego.")
-
-    n_main = min(len(main_draws), len(main_drawnos))
-    n_euro = min(len(euro_draws), len(euro_drawnos))
-
-    main_records = [
-        {"draw_no": main_drawnos[i], "main_nums": main_draws[i]}
-        for i in range(n_main)
-    ]
-    euro_records = [
-        {"draw_no": euro_drawnos[i], "euro_nums": euro_draws[i]}
-        for i in range(n_euro)
-    ]
 
     main_map = {r["draw_no"]: r["main_nums"] for r in main_records}
     euro_map = {r["draw_no"]: r["euro_nums"] for r in euro_records}
@@ -798,7 +747,7 @@ def main():
 
     st.title(APP_TITLE)
     st.write("Generator typowań Eurojackpot na bazie prawdziwych wyników z dwóch plików PDF: 5/50 i 2/12.")
-    st.caption("Parser poprawiony pod strukturę Twoich PDF-ów: tokeny są zbierane sekwencyjnie i dzielone odpowiednio co 5 i co 2, a potem łączone po numerze losowania.")
+    st.caption("Poprawiona wersja: numery losowań są czytane wyłącznie jako osobne 4-cyfrowe linie, dzięki czemu footer 2004–2026 nie psuje wyników.")
 
     if "last_records" not in st.session_state:
         st.session_state["last_records"] = []
@@ -1074,7 +1023,7 @@ def main():
         slice_records = result_records_all[:int(count_choice)]
 
         df_results = pd.DataFrame({
-            "Numer losowania": [r["draw_no"] for r in slice_records],
+            "Numer losowania": [f"{r['draw_no']:04d}" for r in slice_records],
             "Data": [r["date_str"] for r in slice_records],
             "Main 5/50": [" ".join(f"{x:02d}" for x in r["main_nums"]) for r in slice_records],
             "Euro 2/12": [" ".join(f"{x:02d}" for x in r["euro_nums"]) for r in slice_records],
@@ -1172,10 +1121,10 @@ def main():
             use_container_width=True
         )
 
-    with st.expander("✅ Kontrola (pierwsze 3 rekordy — powinny być najnowsze)"):
-        for i, r in enumerate(result_records_all[:3], start=1):
+    with st.expander("✅ Kontrola (pierwsze 5 rekordów — powinny być najnowsze)"):
+        for i, r in enumerate(result_records_all[:5], start=1):
             st.write(
-                f"{i}. Losowanie: {r['draw_no']} | "
+                f"{i}. Losowanie: {r['draw_no']:04d} | "
                 f"Main: {' '.join(f'{x:02d}' for x in r['main_nums'])} | "
                 f"Euro: {' '.join(f'{x:02d}' for x in r['euro_nums'])}"
             )
