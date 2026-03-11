@@ -180,7 +180,7 @@ button[kind="header"]{
 
 
 # =========================================================
-# PDF READERS
+# PDF HELPERS
 # =========================================================
 def _validate_pdf_bytes(pdf_bytes: bytes) -> None:
     if not pdf_bytes.startswith(b"%PDF"):
@@ -215,126 +215,198 @@ def _read_pdf_pages_text_pypdf(pdf_bytes: bytes) -> List[str]:
             pages.append("")
     return pages
 
-def _read_pdf_pages_text(pdf_bytes: bytes) -> List[str]:
-    _validate_pdf_bytes(pdf_bytes)
-
-    last_err = None
-    pages: List[str] = []
-
-    if HAS_PYMUPDF:
-        try:
-            pages = _read_pdf_pages_text_pymupdf(pdf_bytes)
-        except Exception as e:
-            last_err = e
-            pages = []
-
-    if not pages and HAS_PYPDF:
-        try:
-            pages = _read_pdf_pages_text_pypdf(pdf_bytes)
-        except Exception as e:
-            last_err = e
-            pages = []
-
-    if not pages:
-        if last_err:
-            raise RuntimeError(f"Nie udało się odczytać PDF. Ostatni błąd: {last_err}")
-        raise RuntimeError("Nie udało się odczytać PDF.")
-
-    return pages
+def _read_pdf_pages_words_pymupdf(pdf_bytes: bytes) -> List[List[Tuple]]:
+    if not HAS_PYMUPDF:
+        raise RuntimeError("PyMuPDF not available")
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    pages_words = []
+    for page in doc:
+        words = page.get_text("words") or []
+        pages_words.append(words)
+    doc.close()
+    return pages_words
 
 
 # =========================================================
-# STRICT PDF PARSERS
+# ROW-BASED PARSER FOR GRID TABLES
+# To rozwiązanie jest robione dokładnie pod Twój stały wzór tabel.
 # =========================================================
-LINE_DRAWNO = re.compile(r"^\s*(\d{4})\s*$")
-LINE_5NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s*$")
-LINE_2NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s*$")
+LINE_DRAWNO = re.compile(r"^\d{4}$")
+LINE_5NUM_TOKEN = re.compile(r"^\d{1,2}$")
+LINE_2NUM_TOKEN = re.compile(r"^\d{1,2}$")
 
-def _skip_line(ln: str) -> bool:
-    low = ln.lower()
-    if not ln.strip():
+def _group_words_into_rows(words: List[Tuple], y_tolerance: float = 2.2) -> List[List[Tuple]]:
+    """
+    Group words by similar Y coordinate.
+    Each word tuple from PyMuPDF is usually:
+    (x0, y0, x1, y1, text, block_no, line_no, word_no)
+    """
+    if not words:
+        return []
+
+    # sort top-to-bottom, left-to-right
+    words_sorted = sorted(words, key=lambda w: (round(w[1], 1), w[0]))
+    rows: List[List[Tuple]] = []
+
+    current_row: List[Tuple] = []
+    current_y: Optional[float] = None
+
+    for w in words_sorted:
+        y = float(w[1])
+        if current_y is None:
+            current_row = [w]
+            current_y = y
+            continue
+
+        if abs(y - current_y) <= y_tolerance:
+            current_row.append(w)
+            current_y = (current_y + y) / 2.0
+        else:
+            rows.append(sorted(current_row, key=lambda z: z[0]))
+            current_row = [w]
+            current_y = y
+
+    if current_row:
+        rows.append(sorted(current_row, key=lambda z: z[0]))
+
+    return rows
+
+def _is_footer_or_noise_row(texts: List[str]) -> bool:
+    joined = " ".join(texts).lower()
+    if "multipasko" in joined:
         return True
-    if "multipasko" in low:
+    if "www." in joined:
         return True
-    if "eurojackpot 5/50" in low:
+    if "mapy" in joined:
         return True
-    if "eurojackpot 2/12" in low:
+    if "liczbowe" in joined:
         return True
-    if "mapy liczbowe lotto" in low:
+    if "lotto" in joined and "eurojackpot" not in joined:
         return True
-    if "www." in low:
-        return True
-    if "©" in ln:
+    if "©" in joined:
         return True
     return False
 
-def _extract_main_records_from_pages(pages: List[str]) -> List[Dict]:
-    draws: List[List[int]] = []
-    drawnos: List[int] = []
+def _extract_records_from_grid_words(
+    pages_words: List[List[Tuple]],
+    num_min: int,
+    num_max: int,
+    pick_count: int,
+    title_fragment: str
+) -> List[Dict]:
+    """
+    Generic parser for grid-like tables:
+    - first token in row should be draw number (4 digits)
+    - rest of row contains scattered numbers in cells
+    - we collect 1..pick_count numbers in valid range
+    """
+    records: List[Dict] = []
 
-    for page_text in pages:
-        lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
-        for ln in lines:
-            if _skip_line(ln):
+    for page_words in pages_words:
+        rows = _group_words_into_rows(page_words, y_tolerance=2.2)
+
+        for row in rows:
+            texts = [str(w[4]).strip() for w in row if str(w[4]).strip()]
+            if not texts:
                 continue
 
-            m5 = LINE_5NUM.match(ln)
-            if m5:
-                nums = [int(m5.group(i)) for i in range(1, 6)]
-                if len(set(nums)) == 5 and all(MAIN_MIN <= x <= MAIN_MAX for x in nums):
-                    draws.append(sorted(nums))
+            joined = " ".join(texts).lower()
+            if title_fragment.lower() in joined:
+                continue
+            if _is_footer_or_noise_row(texts):
                 continue
 
-            md = LINE_DRAWNO.match(ln)
-            if md:
-                drawnos.append(int(md.group(1)))
+            # Sort row left->right
+            row_sorted = sorted(row, key=lambda z: z[0])
+            row_texts = [str(w[4]).strip() for w in row_sorted if str(w[4]).strip()]
 
-    n = min(len(draws), len(drawnos))
-    return [{"draw_no": drawnos[i], "main_nums": draws[i]} for i in range(n)]
-
-def _extract_euro_records_from_pages(pages: List[str]) -> List[Dict]:
-    draws: List[List[int]] = []
-    drawnos: List[int] = []
-
-    for page_text in pages:
-        lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
-        for ln in lines:
-            if _skip_line(ln):
+            # first token must be draw number like 0936
+            first = row_texts[0]
+            if not LINE_DRAWNO.match(first):
                 continue
 
-            m2 = LINE_2NUM.match(ln)
-            if m2:
-                nums = [int(m2.group(1)), int(m2.group(2))]
-                if len(set(nums)) == 2 and all(EURO_MIN <= x <= EURO_MAX for x in nums):
-                    draws.append(sorted(nums))
-                continue
+            draw_no = int(first)
 
-            md = LINE_DRAWNO.match(ln)
-            if md:
-                drawnos.append(int(md.group(1)))
+            nums: List[int] = []
+            for token in row_texts[1:]:
+                if not LINE_5NUM_TOKEN.match(token):
+                    continue
+                val = int(token)
+                if num_min <= val <= num_max:
+                    nums.append(val)
 
-    n = min(len(draws), len(drawnos))
-    return [{"draw_no": drawnos[i], "euro_nums": draws[i]} for i in range(n)]
+            nums = sorted(nums)
+
+            if len(nums) == pick_count and len(set(nums)) == pick_count:
+                records.append({
+                    "draw_no": draw_no,
+                    "nums": nums
+                })
+
+    # remove duplicates by draw_no, keep first (newest-first because pages are top-down)
+    dedup: Dict[int, List[int]] = {}
+    ordered_drawnos: List[int] = []
+
+    for r in records:
+        dno = r["draw_no"]
+        if dno not in dedup:
+            dedup[dno] = r["nums"]
+            ordered_drawnos.append(dno)
+
+    final_records = [{"draw_no": dno, "nums": dedup[dno]} for dno in ordered_drawnos]
+    final_records.sort(key=lambda r: r["draw_no"], reverse=True)
+    return final_records
 
 
 # =========================================================
-# LOAD + JOIN
+# LOAD + JOIN BOTH PDFs
 # =========================================================
 @st.cache_data(show_spinner=False)
 def load_eurojackpot_records_cached(pdf_main_bytes: bytes, pdf_euro_bytes: bytes) -> List[Dict]:
-    main_pages = _read_pdf_pages_text(pdf_main_bytes)
-    euro_pages = _read_pdf_pages_text(pdf_euro_bytes)
+    _validate_pdf_bytes(pdf_main_bytes)
+    _validate_pdf_bytes(pdf_euro_bytes)
 
-    main_records = _extract_main_records_from_pages(main_pages)
-    euro_records = _extract_euro_records_from_pages(euro_pages)
+    if not HAS_PYMUPDF:
+        raise RuntimeError("Ta wersja parsera wymaga PyMuPDF (fitz).")
 
-    if not main_records:
-        raise RuntimeError("Nie udało się wyciągnąć wyników 5/50 z pliku głównego.")
-    if not euro_records:
-        raise RuntimeError("Nie udało się wyciągnąć wyników 2/12 z pliku dodatkowego.")
+    main_pages_words = _read_pdf_pages_words_pymupdf(pdf_main_bytes)
+    euro_pages_words = _read_pdf_pages_words_pymupdf(pdf_euro_bytes)
 
-    main_map = {r["draw_no"]: r["main_nums"] for r in main_records}
-    euro_map = {r["draw_no"]: r["euro_nums"] for r in euro_records}
+    main_records_raw = _extract_records_from_grid_words(
+        pages_words=main_pages_words,
+        num_min=MAIN_MIN,
+        num_max=MAIN_MAX,
+        pick_count=MAIN_PICK_COUNT,
+        title_fragment="Eurojackpot 5/50"
+    )
+
+    euro_records_raw = _extract_records_from_grid_words(
+        pages_words=euro_pages_words,
+        num_min=EURO_MIN,
+        num_max=EURO_MAX,
+        pick_count=EURO_PICK_COUNT,
+        title_fragment="Eurojackpot 2/12"
+    )
+
+    if not main_records_raw:
+        # fallback debug: try text extraction so user sees something useful
+        text_pages = _read_pdf_pages_text_pymupdf(pdf_main_bytes)
+        sample = "\n".join(text_pages[:1])[:3000]
+        raise RuntimeError(
+            "Nie udało się wyciągnąć wyników 5/50 z pliku głównego.\n\n"
+            f"Podgląd tekstu z pierwszej strony:\n{sample}"
+        )
+
+    if not euro_records_raw:
+        text_pages = _read_pdf_pages_text_pymupdf(pdf_euro_bytes)
+        sample = "\n".join(text_pages[:1])[:3000]
+        raise RuntimeError(
+            "Nie udało się wyciągnąć wyników 2/12 z pliku dodatkowego.\n\n"
+            f"Podgląd tekstu z pierwszej strony:\n{sample}"
+        )
+
+    main_map = {r["draw_no"]: r["nums"] for r in main_records_raw}
+    euro_map = {r["draw_no"]: r["nums"] for r in euro_records_raw}
 
     common_drawnos = sorted(set(main_map.keys()) & set(euro_map.keys()), reverse=True)
 
@@ -742,7 +814,7 @@ def main():
 
     st.title(APP_TITLE)
     st.write("Generator typowań Eurojackpot na bazie prawdziwych wyników z dwóch plików PDF: 5/50 i 2/12.")
-    st.caption("Wersja z poprawionym parserem linii i numerów losowań.")
+    st.caption("Parser tabelaryczny po pozycjach słów — dopasowany do stałego wzoru Twoich PDF-ów.")
 
     if "last_records" not in st.session_state:
         st.session_state["last_records"] = []
@@ -1000,7 +1072,6 @@ def main():
         hot_set = st.session_state["hot_master_set"]
         main_str = " ".join(f"{x:02d}" for x in hot_set["main"])
         euro_str = " ".join(f"{x:02d}" for x in hot_set["euro"])
-
         st.markdown("### 🔥 HOT MASTER SET — Eurojackpot")
         st.markdown(f'<div class="v-row"><b>Main 5/50</b> — {main_str}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="v-row"><b>Euro 2/12</b> — {euro_str}</div>', unsafe_allow_html=True)
@@ -1009,7 +1080,6 @@ def main():
         info = st.session_state["last_daily"]
         main_str = " ".join(f"{x:02d}" for x in info["main"])
         euro_str = " ".join(f"{x:02d}" for x in info["euro"])
-
         st.markdown("### 🌿 Twoje cyfry dnia — Eurojackpot")
         st.markdown(f'<div class="v-row"><b>Main 5/50</b> — {main_str}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="v-row"><b>Euro 2/12</b> — {euro_str}</div>', unsafe_allow_html=True)
@@ -1045,8 +1115,8 @@ def main():
             use_container_width=True
         )
 
-    with st.expander("✅ Kontrola (pierwsze 5 rekordów — powinny być najnowsze)"):
-        for i, r in enumerate(result_records_all[:5], start=1):
+    with st.expander("✅ Kontrola (pierwsze 10 rekordów — powinny być najnowsze)"):
+        for i, r in enumerate(result_records_all[:10], start=1):
             st.write(
                 f"{i}. Losowanie: {r['draw_no']:04d} | "
                 f"Main: {' '.join(f'{x:02d}' for x in r['main_nums'])} | "
