@@ -49,7 +49,7 @@ HYBRID_MIX_P = 0.10
 
 
 # =========================================================
-# UI STYLE — football pitch theme
+# UI STYLE
 # =========================================================
 FOOTBALL_CSS = """
 <style>
@@ -244,16 +244,13 @@ def _read_pdf_pages_text(pdf_bytes: bytes) -> List[str]:
 
 
 # =========================================================
-# STRICT LINE PARSERS
-# Kluczowa poprawka:
-# - draw number = tylko linia dokładnie 4 cyfry
-# - ignorujemy footer www.multipasko / 2004-2026
+# STRICT PDF PARSERS
 # =========================================================
+LINE_DRAWNO = re.compile(r"^\s*(\d{4})\s*$")
 LINE_5NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s*$")
 LINE_2NUM = re.compile(r"^\s*(\d{1,2})\s+(\d{1,2})\s*$")
-LINE_DRAWNO = re.compile(r"^\s*(\d{4})\s*$")
 
-def _should_skip_line(ln: str) -> bool:
+def _skip_line(ln: str) -> bool:
     low = ln.lower()
     if not ln.strip():
         return True
@@ -265,6 +262,8 @@ def _should_skip_line(ln: str) -> bool:
         return True
     if "mapy liczbowe lotto" in low:
         return True
+    if "www." in low:
+        return True
     if "©" in ln:
         return True
     return False
@@ -275,9 +274,8 @@ def _extract_main_records_from_pages(pages: List[str]) -> List[Dict]:
 
     for page_text in pages:
         lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
-
         for ln in lines:
-            if _should_skip_line(ln):
+            if _skip_line(ln):
                 continue
 
             m5 = LINE_5NUM.match(ln)
@@ -289,8 +287,7 @@ def _extract_main_records_from_pages(pages: List[str]) -> List[Dict]:
 
             md = LINE_DRAWNO.match(ln)
             if md:
-                dno = int(md.group(1))
-                drawnos.append(dno)
+                drawnos.append(int(md.group(1)))
 
     n = min(len(draws), len(drawnos))
     return [{"draw_no": drawnos[i], "main_nums": draws[i]} for i in range(n)]
@@ -301,9 +298,8 @@ def _extract_euro_records_from_pages(pages: List[str]) -> List[Dict]:
 
     for page_text in pages:
         lines = [ln.strip() for ln in page_text.splitlines() if ln.strip()]
-
         for ln in lines:
-            if _should_skip_line(ln):
+            if _skip_line(ln):
                 continue
 
             m2 = LINE_2NUM.match(ln)
@@ -315,15 +311,14 @@ def _extract_euro_records_from_pages(pages: List[str]) -> List[Dict]:
 
             md = LINE_DRAWNO.match(ln)
             if md:
-                dno = int(md.group(1))
-                drawnos.append(dno)
+                drawnos.append(int(md.group(1)))
 
     n = min(len(draws), len(drawnos))
     return [{"draw_no": drawnos[i], "euro_nums": draws[i]} for i in range(n)]
 
 
 # =========================================================
-# LOAD + JOIN BOTH PDFs
+# LOAD + JOIN
 # =========================================================
 @st.cache_data(show_spinner=False)
 def load_eurojackpot_records_cached(pdf_main_bytes: bytes, pdf_euro_bytes: bytes) -> List[Dict]:
@@ -747,7 +742,7 @@ def main():
 
     st.title(APP_TITLE)
     st.write("Generator typowań Eurojackpot na bazie prawdziwych wyników z dwóch plików PDF: 5/50 i 2/12.")
-    st.caption("Poprawiona wersja: numery losowań są czytane wyłącznie jako osobne 4-cyfrowe linie, dzięki czemu footer 2004–2026 nie psuje wyników.")
+    st.caption("Wersja z poprawionym parserem linii i numerów losowań.")
 
     if "last_records" not in st.session_state:
         st.session_state["last_records"] = []
@@ -766,15 +761,14 @@ def main():
     st.write(f"Plik główny 5/50: `{pdf_main_path}`")
     st.write(f"Plik dodatkowy 2/12: `{pdf_euro_path}`")
     st.write(f"Silnik PDF: **{'PyMuPDF (fitz)' if HAS_PYMUPDF else 'pypdf (fallback)'}**")
-    st.markdown('<div class="v-muted">Dane są łączone po tym samym numerze losowania z obu plików.</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     if not pdf_main_path.exists():
-        st.error(f"❌ Nie znaleziono `{PDF_MAIN_FILENAME}` obok `app.py`.")
+        st.error(f"❌ Nie znaleziono `{PDF_MAIN_FILENAME}`.")
         st.stop()
 
     if not pdf_euro_path.exists():
-        st.error(f"❌ Nie znaleziono `{PDF_EURO_FILENAME}` obok `app.py`.")
+        st.error(f"❌ Nie znaleziono `{PDF_EURO_FILENAME}`.")
         st.stop()
 
     try:
@@ -833,7 +827,7 @@ def main():
     with left:
         st.markdown('<div class="v-card">', unsafe_allow_html=True)
         st.subheader("📊 Częstotliwość — Main 5/50")
-        st.success(f"✅ Analizowane losowania: **{len(result_records)}** (z {len(result_records_all)} połączonych losowań)")
+        st.success(f"✅ Analizowane losowania: **{len(result_records)}**")
         st.dataframe(freq_df_main, use_container_width=True, hide_index=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -859,13 +853,6 @@ def main():
         st.markdown(" ".join([f'<span class="v-pill">{n:02d}</span>' for n in sorted(cold_euro)]), unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown('<div class="v-card">', unsafe_allow_html=True)
-        st.subheader("🎛️ Podsumowanie trybu")
-        st.write(f"**Tryb:** {cfg['mode_ui']}")
-        st.write(f"**Analiza HOT/COLD:** ostatnie **{cfg['history_window']}** losowań")
-        st.write(f"**Tryb inteligentny:** {'TAK' if cfg['smart_enabled'] else 'NIE'}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
     st.divider()
 
     st.markdown('<div class="v-card">', unsafe_allow_html=True)
@@ -885,10 +872,7 @@ def main():
         st.session_state["show_results"] = not st.session_state["show_results"]
 
     if show_hot_set:
-        st.session_state["hot_master_set"] = {
-            "main": hot_master_main,
-            "euro": hot_master_euro
-        }
+        st.session_state["hot_master_set"] = {"main": hot_master_main, "euro": hot_master_euro}
 
     mode_ui = cfg["mode_ui"]
     if mode_ui == "Hybryda 70/20/10 (hot/cold/mix)":
@@ -902,31 +886,24 @@ def main():
 
     def gen_one_record() -> Dict:
         if base_mode_kind == "hybrid":
-            chosen = random.choices(
-                ["hot", "cold", "mix"],
-                weights=[HYBRID_HOT_P, HYBRID_COLD_P, HYBRID_MIX_P],
-                k=1
-            )[0]
+            chosen = random.choices(["hot", "cold", "mix"], weights=[HYBRID_HOT_P, HYBRID_COLD_P, HYBRID_MIX_P], k=1)[0]
             return {
                 "Typ": chosen,
                 "Main": gen_side_ticket(chosen, hot_main, cold_main, MAIN_PICK_COUNT, cfg["mix_main_hot_count"]),
                 "Euro": gen_side_ticket(chosen, hot_euro, cold_euro, EURO_PICK_COUNT, cfg["mix_euro_hot_count"])
             }
-
         if base_mode_kind == "hot":
             return {
                 "Typ": "hot",
                 "Main": gen_side_ticket("hot", hot_main, cold_main, MAIN_PICK_COUNT, cfg["mix_main_hot_count"]),
                 "Euro": gen_side_ticket("hot", hot_euro, cold_euro, EURO_PICK_COUNT, cfg["mix_euro_hot_count"])
             }
-
         if base_mode_kind == "cold":
             return {
                 "Typ": "cold",
                 "Main": gen_side_ticket("cold", hot_main, cold_main, MAIN_PICK_COUNT, cfg["mix_main_hot_count"]),
                 "Euro": gen_side_ticket("cold", hot_euro, cold_euro, EURO_PICK_COUNT, cfg["mix_euro_hot_count"])
             }
-
         return {
             "Typ": "mix",
             "Main": gen_side_ticket("mix", hot_main, cold_main, MAIN_PICK_COUNT, cfg["mix_main_hot_count"]),
@@ -957,7 +934,6 @@ def main():
                     "euro_no_consecutive": cfg["euro_no_consecutive"],
                     "euro_even_odd_choice": cfg["even_odd_choice_euro"]
                 }
-
                 recs = generate_with_smart_filters(
                     gen_func=gen_one_record,
                     n_tickets=int(cfg["n_tickets"]),
@@ -970,52 +946,32 @@ def main():
 
         progress.empty()
         status.empty()
-
-        if cfg["smart_enabled"] and len(recs) < int(cfg["n_tickets"]):
-            st.warning(
-                f"⚠️ Filtry są ostre: wygenerowano **{len(recs)}** / {int(cfg['n_tickets'])} kuponów. "
-                "Poluzuj filtry albo zwiększ limit prób."
-            )
-
         st.session_state["last_records"] = recs
 
     if daily:
-        prefer_parity_main = parity_bias_from_last_n(main_draws, 10)
-        prefer_level_main = high_low_bias_from_last_two(main_draws, threshold=25)
-        target_spread_main = avg_spread_last_n(main_draws, 10)
-
         daily_main = pick_daily_set_from_hot(
             hot=hot_main,
             pick_count=MAIN_PICK_COUNT,
             nmin=MAIN_MIN,
             nmax=MAIN_MAX,
-            prefer_parity=prefer_parity_main,
-            prefer_level=prefer_level_main,
+            prefer_parity=parity_bias_from_last_n(main_draws, 10),
+            prefer_level=high_low_bias_from_last_two(main_draws, threshold=25),
             threshold=25,
-            target_spread=target_spread_main,
+            target_spread=avg_spread_last_n(main_draws, 10),
             max_attempts=650
         )
-
-        prefer_parity_euro = parity_bias_from_last_n(euro_draws, 10)
-        prefer_level_euro = high_low_bias_from_last_two(euro_draws, threshold=6)
-        target_spread_euro = avg_spread_last_n(euro_draws, 10)
-
         daily_euro = pick_daily_set_from_hot(
             hot=hot_euro,
             pick_count=EURO_PICK_COUNT,
             nmin=EURO_MIN,
             nmax=EURO_MAX,
-            prefer_parity=prefer_parity_euro,
-            prefer_level=prefer_level_euro,
+            prefer_parity=parity_bias_from_last_n(euro_draws, 10),
+            prefer_level=high_low_bias_from_last_two(euro_draws, threshold=6),
             threshold=6,
-            target_spread=target_spread_euro,
+            target_spread=avg_spread_last_n(euro_draws, 10),
             max_attempts=400
         )
-
-        st.session_state["last_daily"] = {
-            "main": daily_main,
-            "euro": daily_euro
-        }
+        st.session_state["last_daily"] = {"main": daily_main, "euro": daily_euro}
 
     if st.session_state["show_results"]:
         st.markdown("### 📋 Ostatnie wyniki Eurojackpot")
@@ -1030,8 +986,7 @@ def main():
         })
         st.dataframe(df_results, use_container_width=True, hide_index=True)
 
-        st.markdown('<div class="v-muted">Zapis jest dostępny wyłącznie jako plik TXT (pobieranie → folder „Pobrane”).</div>', unsafe_allow_html=True)
-        filename_input = st.text_input("Nazwa pliku wyników .txt (np. euro_wyniki.txt)", value="euro_wyniki.txt")
+        filename_input = st.text_input("Nazwa pliku wyników .txt", value="euro_wyniki.txt")
         safe_name = sanitize_txt_filename(filename_input)
         st.download_button(
             "⬇️ Pobierz wyniki jako TXT",
@@ -1047,26 +1002,8 @@ def main():
         euro_str = " ".join(f"{x:02d}" for x in hot_set["euro"])
 
         st.markdown("### 🔥 HOT MASTER SET — Eurojackpot")
-        st.markdown(
-            f'<div class="v-row"><b>Main 5/50</b> — {main_str} '
-            f'<span class="v-muted"> | z ostatnich {cfg["history_window"]} losowań</span></div>',
-            unsafe_allow_html=True
-        )
-        st.markdown(
-            f'<div class="v-row"><b>Euro 2/12</b> — {euro_str} '
-            f'<span class="v-muted"> | z ostatnich {cfg["history_window"]} losowań</span></div>',
-            unsafe_allow_html=True
-        )
-
-        hot_set_filename_input = st.text_input("Nazwa pliku HOT SET .txt (np. euro_hot_set.txt)", value="euro_hot_set.txt")
-        safe_hot_name = sanitize_txt_filename(hot_set_filename_input)
-        st.download_button(
-            "⬇️ Pobierz HOT SET jako TXT",
-            data=make_txt_for_hot_master_set(hot_set["main"], hot_set["euro"], cfg["history_window"]),
-            file_name=safe_hot_name,
-            mime="text/plain",
-            use_container_width=True
-        )
+        st.markdown(f'<div class="v-row"><b>Main 5/50</b> — {main_str}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="v-row"><b>Euro 2/12</b> — {euro_str}</div>', unsafe_allow_html=True)
 
     if st.session_state.get("last_daily") is not None:
         info = st.session_state["last_daily"]
@@ -1074,19 +1011,12 @@ def main():
         euro_str = " ".join(f"{x:02d}" for x in info["euro"])
 
         st.markdown("### 🌿 Twoje cyfry dnia — Eurojackpot")
-        st.markdown(
-            f'<div class="v-row"><b>Main 5/50</b> — {main_str}</div>',
-            unsafe_allow_html=True
-        )
-        st.markdown(
-            f'<div class="v-row"><b>Euro 2/12</b> — {euro_str}</div>',
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div class="v-row"><b>Main 5/50</b> — {main_str}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="v-row"><b>Euro 2/12</b> — {euro_str}</div>', unsafe_allow_html=True)
 
     records = st.session_state.get("last_records", [])
     if records:
         st.markdown("### 🎯 Wygenerowane kupony Eurojackpot")
-
         df_out = pd.DataFrame({
             "Typ": [r["Typ"] for r in records],
             "Main 5/50": [" ".join(f"{x:02d}" for x in r["Main"]) for r in records],
@@ -1094,24 +1024,18 @@ def main():
         })
 
         preview_n = min(int(cfg["preview_limit"]), len(records))
-        st.caption(f"Podgląd pierwszych **{preview_n}** kuponów (pełna lista w tabeli).")
-
         for i in range(preview_n):
             main_str = df_out.iloc[i]["Main 5/50"]
             euro_str = df_out.iloc[i]["Euro 2/12"]
             typ = df_out.iloc[i]["Typ"]
-
             st.markdown(
-                f'<div class="v-row"><b>Kupon #{i+1:03d}</b> '
-                f'<span class="v-muted">[{typ}]</span> — Main: {main_str} | Euro: {euro_str}</div>',
+                f'<div class="v-row"><b>Kupon #{i+1:03d}</b> <span class="v-muted">[{typ}]</span> — Main: {main_str} | Euro: {euro_str}</div>',
                 unsafe_allow_html=True
             )
 
-        st.markdown("#### Pełna tabela")
         st.dataframe(df_out, use_container_width=True, hide_index=True)
 
-        st.markdown('<div class="v-muted">Zapis kuponów jest dostępny wyłącznie jako plik TXT (pobieranie → „Pobrane”).</div>', unsafe_allow_html=True)
-        ticket_filename_input = st.text_input("Nazwa pliku kuponów .txt (np. euro_kupony.txt)", value="euro_kupony.txt")
+        ticket_filename_input = st.text_input("Nazwa pliku kuponów .txt", value="euro_kupony.txt")
         safe_ticket_name = sanitize_txt_filename(ticket_filename_input)
         st.download_button(
             "⬇️ Pobierz kupony jako TXT",
@@ -1128,19 +1052,6 @@ def main():
                 f"Main: {' '.join(f'{x:02d}' for x in r['main_nums'])} | "
                 f"Euro: {' '.join(f'{x:02d}' for x in r['euro_nums'])}"
             )
-
-    with st.expander("📌 Diagnostyka — TOP/LOW"):
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write("TOP 15 — Main 5/50")
-            st.dataframe(freq_df_main.head(15), use_container_width=True, hide_index=True)
-            st.write("LOW 15 — Main 5/50")
-            st.dataframe(freq_df_main.tail(15).sort_values(["Wystąpienia", "Liczba"]), use_container_width=True, hide_index=True)
-        with c2:
-            st.write("TOP 12 — Euro 2/12")
-            st.dataframe(freq_df_euro.head(12), use_container_width=True, hide_index=True)
-            st.write("LOW 12 — Euro 2/12")
-            st.dataframe(freq_df_euro.tail(12).sort_values(["Wystąpienia", "Liczba"]), use_container_width=True, hide_index=True)
 
 
 if __name__ == "__main__":
