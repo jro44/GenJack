@@ -86,6 +86,7 @@ APP_CSS = """
   box-shadow: var(--shadow);
   border-radius: 18px;
   padding: 16px 16px 12px 16px;
+  margin-bottom: 16px;
 }
 
 .v-row{
@@ -100,6 +101,15 @@ APP_CSS = """
 .v-row-premium{
   background: rgba(216,184,75,0.12);
   border: 1px solid rgba(216,184,75,0.30);
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  color: #000000 !important;
+}
+
+.v-row-danger{
+  background: rgba(207, 59, 59, 0.08);
+  border: 1px solid rgba(207, 59, 59, 0.24);
   border-radius: 14px;
   padding: 10px 12px;
   margin: 8px 0;
@@ -134,6 +144,70 @@ APP_CSS = """
   color: var(--mut) !important;
 }
 
+.rank-card{
+  background: linear-gradient(180deg, #ffffff, #f8fffb);
+  border: 1px solid rgba(31,139,76,0.18);
+  border-radius: 16px;
+  padding: 14px 14px 12px 14px;
+  margin: 10px 0;
+  box-shadow: 0 8px 18px rgba(0,0,0,.05);
+}
+
+.rank-card-premium{
+  background: linear-gradient(180deg, #fffdf6, #fff9ea);
+  border: 1px solid rgba(216,184,75,0.28);
+  border-radius: 16px;
+  padding: 14px 14px 12px 14px;
+  margin: 10px 0;
+  box-shadow: 0 8px 18px rgba(0,0,0,.05);
+}
+
+.rank-card-gold{
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  border: 2px solid #ffc107;
+  border-radius: 16px;
+  padding: 18px;
+  margin: 15px 0;
+  box-shadow: 0 12px 24px rgba(255, 193, 7, 0.2);
+}
+
+.rank-title{
+  font-size: 1.05rem;
+  font-weight: 900;
+  margin-bottom: 6px;
+  color:#000000 !important;
+}
+
+.rank-title-gold{
+  font-size: 1.3rem;
+  font-weight: 900;
+  margin-bottom: 8px;
+  color:#d8b84b !important;
+  text-shadow: 1px 1px 0px rgba(0,0,0,0.1);
+}
+
+.rank-main{
+  font-size: 1.2rem;
+  font-weight: 1000;
+  letter-spacing: .8px;
+  margin-bottom: 6px;
+  color:#000000 !important;
+}
+
+.rank-main-gold{
+  font-size: 1.6rem;
+  font-weight: 1000;
+  letter-spacing: 1.5px;
+  margin-bottom: 10px;
+  color:#000000 !important;
+}
+
+.rank-meta{
+  font-size: .95rem;
+  line-height: 1.55;
+  color:#000000 !important;
+}
+
 [data-testid="stDataFrame"]{
   border-radius: 16px !important;
   overflow: hidden !important;
@@ -160,6 +234,12 @@ div.stButton > button[kind="primary"]{
 div.stButton > button[kind="primary"]:hover{
   filter: brightness(1.03);
   transform: translateY(-1px);
+}
+
+.btn-gold > button{
+  background: linear-gradient(90deg, #d8b84b 0%, #ffdf00 100%) !important;
+  color: #000 !important;
+  box-shadow: 0 10px 22px rgba(216,184,75, 0.4) !important;
 }
 
 button[kind="header"]{
@@ -220,6 +300,120 @@ def pick_unique(pool: List[int], k: int) -> List[int]:
     if len(pool) < k:
         raise ValueError("Za mało liczb w puli.")
     return sorted(random.sample(pool, k))
+
+
+def clamp(value: int, low: int, high: int) -> int:
+    return max(low, min(high, value))
+
+
+# =========================================================
+# VISUAL HELPERS
+# =========================================================
+def render_ticket_cards(records: List[Dict], preview_n: int) -> None:
+    for i in range(preview_n):
+        typ = records[i]["Typ"]
+        main_kupon = records[i]["Main"]
+        euro_kupon = records[i]["Euro"]
+        
+        main_str = " ".join(f"{x:02d}" for x in main_kupon)
+        euro_str = " ".join(f"{x:02d}" for x in euro_kupon)
+        
+        ev_m, od_m = even_odd_split(main_kupon)
+        ev_e, od_e = even_odd_split(euro_kupon)
+        
+        pairs_m = count_adjacent_pairs(sorted(main_kupon))
+        pairs_e = count_adjacent_pairs(sorted(euro_kupon))
+        
+        css_class = "rank-card-premium" if typ == "premium" else "rank-card"
+
+        st.markdown(
+            f"""
+<div class="{css_class}">
+  <div class="rank-title">Kupon #{i+1:03d} <span class="v-muted">[{typ}]</span></div>
+  <div class="rank-main">Main: {main_str} | Euro: {euro_str}</div>
+  <div class="rank-meta">
+    Parzyste/Nieparzyste (Main): <b>{ev_m}/{od_m}</b> | Pary kolejne (Main): <b>{pairs_m}</b><br>
+    Parzyste/Nieparzyste (Euro): <b>{ev_e}/{od_e}</b> | Pary kolejne (Euro): <b>{pairs_e}</b>
+  </div>
+</div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+def render_turbo_cards(rows: List[Dict]) -> None:
+    for row in rows:
+        st.markdown(
+            f"""
+<div class="rank-card">
+  <div class="rank-title">Ranking #{row["Ranking"]}</div>
+  <div class="rank-main">Main: {row["Main 5/50"]} | Euro: {row["Euro 2/12"]}</div>
+  <div class="rank-meta">
+    Score łącznie: <b>{row["Score"]}</b> (Main Score: <b>{row["Main Score"]}</b> | Euro Score: <b>{row["Euro Score"]}</b>)<br>
+    Main P/N: <b>{row["Main P/N"]}</b> | Euro P/N: <b>{row["Euro P/N"]}</b><br>
+    Main rozstrzał: <b>{row["Main rozstrzał"]}</b> | Euro rozstrzał: <b>{row["Euro rozstrzał"]}</b><br>
+    Podobieństwo do ostatnich: Main <b>{row["Podobieństwo main"]}</b> | Euro <b>{row["Podobieństwo euro"]}</b>
+  </div>
+</div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+def render_premium_cards(rows: List[Dict]) -> None:
+    for row in rows:
+        st.markdown(
+            f"""
+<div class="rank-card-premium">
+  <div class="rank-title">Premium #{row["Ranking"]}</div>
+  <div class="rank-main">Main: {row["Main 5/50"]} | Euro: {row["Euro 2/12"]}</div>
+  <div class="rank-meta">
+    Premium Score: <b>{row["Premium Score"]}</b> (Main Score: <b>{row["Bazowy Score Main"]}</b> | Euro Score: <b>{row["Bazowy Score Euro"]}</b> | Bonus: <b>{row["Bonus Premium"]}</b>)<br>
+    HOT MAX (Main/Euro): <b>{row["HOT MAX main"]}/{row["HOT MAX euro"]}</b> | Różnice (Main/Euro): <b>{row["Różnice main"]}/{row["Różnice euro"]}</b><br>
+  </div>
+</div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+def render_wielka_szansa_cards(details: List[Dict]) -> None:
+    for d in details:
+        st.markdown(
+            f"""
+<div class="rank-card">
+  <div class="rank-title">Pozycja #{d["Pozycja"]}</div>
+  <div class="rank-main">Prognoza po korekcie: {int(d["Prognoza_po_korekcie"]):02d}</div>
+  <div class="rank-meta">
+    Ostatnia wartość: <b>{d["Ostatnia wartość"]}</b><br>
+    Prognoza surowa: <b>{d["Prognoza"]}</b><br>
+    Pewność: <b>{d["Pewność %"]}%</b><br>
+    Metoda: <b>{d["Metoda"]}</b>
+  </div>
+</div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+def render_zloty_strzal_card(zs_data: Dict) -> None:
+    main_str = " ".join(f"{x:02d}" for x in zs_data["main_kupon"])
+    euro_str = " ".join(f"{x:02d}" for x in zs_data["euro_kupon"])
+    
+    st.markdown(
+        f"""
+<div class="rank-card-gold">
+  <div class="rank-title-gold">🌟 MISTRZOWSKI KUPON (MOMENTUM SCORE)</div>
+  <div class="rank-main-gold">Main: {main_str} | Euro: {euro_str}</div>
+  <div class="rank-meta">
+    <b>Dlaczego ten zestaw?</b> Algorytm przeanalizował Momentum wszystkich liczb z osobna dla bębna Main (5/50) oraz Euro (2/12) i wylosował probabilistycznie te, które mają najsilniejszy trend. Każde kliknięcie to <b>unikalny kupon</b> oparty o czołówkę rankingu!<br><br>
+    Średni Momentum Score (Main): <b>{zs_data['main_score']:.2f} pkt</b> | 
+    Średni Momentum Score (Euro): <b>{zs_data['euro_score']:.2f} pkt</b>
+  </div>
+</div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 # =========================================================
@@ -514,7 +708,7 @@ def build_heatmap_df(percent_df: pd.DataFrame, nmin: int, nmax: int, columns_per
 
 
 # =========================================================
-# GENERATORS
+# GENERATORS (OLD METHOD)
 # =========================================================
 def gen_side_ticket(mode: str, hot: List[int], cold: List[int], pick_count: int, mix_hot_count: int, nmin: int, nmax: int) -> List[int]:
     if mode == "hot":
@@ -532,6 +726,96 @@ def gen_side_ticket(mode: str, hot: List[int], cold: List[int], pick_count: int,
     if mode == "random":
         return pick_unique(list(range(nmin, nmax + 1)), pick_count)
     raise ValueError("Nieznany tryb losowania.")
+
+
+# =========================================================
+# ZŁOTY STRZAŁ (MOMENTUM AI) - STOCHASTYCZNY
+# =========================================================
+def _calc_momentum(draws: List[List[int]], nmin: int, nmax: int, pick_count: int) -> Dict:
+    if not draws:
+        return {"kupon": list(range(nmin, nmin + pick_count)), "sredni_score": 0.0, "details": []}
+
+    short_window = 30
+    long_window = 999
+    draws_short = draws[:min(short_window, len(draws))]
+    draws_long = draws[:min(long_window, len(draws))]
+
+    short_counts = Counter()
+    for d in draws_short:
+        for n in set(d): short_counts[n] += 1
+            
+    long_counts = Counter()
+    for d in draws_long:
+        for n in set(d): long_counts[n] += 1
+
+    last_seen = {}
+    for n in range(nmin, nmax + 1):
+        last_seen[n] = 9999
+        for idx, d in enumerate(draws):
+            if n in d:
+                last_seen[n] = idx
+                break
+
+    scores = []
+    for n in range(nmin, nmax + 1):
+        short_rate = short_counts.get(n, 0) / max(1, len(draws_short))
+        long_rate = long_counts.get(n, 0) / max(1, len(draws_long))
+        
+        delay = last_seen[n]
+        delay_score = 0.0
+        
+        if 4 <= delay <= 15:
+            delay_score = 1.0
+        elif delay < 4:
+            delay_score = 0.5 
+        else:
+            delay_score = max(0.0, 1.0 - (delay - 15) * 0.05) 
+
+        momentum = (short_rate * 50.0) + (long_rate * 30.0) + (delay_score * 20.0)
+        
+        scores.append({
+            "liczba": n,
+            "short_rate": short_rate,
+            "long_rate": long_rate,
+            "delay": delay,
+            "momentum": momentum
+        })
+
+    scores.sort(key=lambda x: x["momentum"], reverse=True)
+    
+    population = [item["liczba"] for item in scores]
+    raw_weights = [item["momentum"] ** 1.5 for item in scores]
+    
+    weight_sum = sum(raw_weights)
+    if weight_sum > 0:
+        probs = [w / weight_sum for w in raw_weights]
+    else:
+        probs = [1.0 / len(raw_weights)] * len(raw_weights)
+
+    chosen = np.random.choice(population, size=pick_count, replace=False, p=probs)
+    ticket = sorted(chosen.tolist())
+    
+    drawn_momentum_sum = sum(item["momentum"] for item in scores if item["liczba"] in ticket)
+    avg_score = drawn_momentum_sum / pick_count
+
+    return {
+        "kupon": ticket,
+        "sredni_score": avg_score,
+        "details": scores
+    }
+
+def build_zloty_strzal_momentum_eurojackpot(main_draws: List[List[int]], euro_draws: List[List[int]]) -> Dict:
+    main_data = _calc_momentum(main_draws, MAIN_MIN, MAIN_MAX, MAIN_PICK_COUNT)
+    euro_data = _calc_momentum(euro_draws, EURO_MIN, EURO_MAX, EURO_PICK_COUNT)
+    
+    return {
+        "main_kupon": main_data["kupon"],
+        "euro_kupon": euro_data["kupon"],
+        "main_score": main_data["sredni_score"],
+        "euro_score": euro_data["sredni_score"],
+        "main_details": main_data["details"][:15],
+        "euro_details": euro_data["details"][:6]
+    }
 
 
 # =========================================================
@@ -797,7 +1081,7 @@ def build_hot_max_set(percent_df: pd.DataFrame, pick_count: int) -> Tuple[List[i
 
 
 # =========================================================
-# TURBO SCORE
+# SCORE TICKET
 # =========================================================
 def similarity_to_recent(ticket: List[int], recent_draws: List[List[int]]) -> int:
     tset = set(ticket)
@@ -912,7 +1196,86 @@ def score_euro_ticket(
         "final_score": final_score,
     }
 
+# =========================================================
+# NOWY MOCNIEJSZY SILNIK
+# =========================================================
+def run_new_stronger_engine_eurojackpot(
+    main_draws: List[List[int]],
+    euro_draws: List[List[int]],
+    n_tickets: int,
+    candidate_count: int,
+    hot_main_size: int,
+    hot_main_count: int,
+    hot_euro_size: int,
+    hot_euro_count: int
+) -> List[Dict]:
+    main_percent_df = compute_presence_percent_df_cached(main_draws, MAIN_MIN, MAIN_MAX)
+    euro_percent_df = compute_presence_percent_df_cached(euro_draws, EURO_MIN, EURO_MAX)
 
+    main_percent_map = dict(zip(main_percent_df["Liczba"], main_percent_df["Procent_losowan"]))
+    euro_percent_map = dict(zip(euro_percent_df["Liczba"], euro_percent_df["Procent_losowan"]))
+
+    main_pair_counter, main_triple_counter = compute_pair_triple_stats_main_cached(main_draws)
+    euro_pair_counter = compute_pair_stats_euro_cached(euro_draws)
+
+    main_target_profile = build_target_profile(main_draws, 25)
+    euro_target_profile = build_target_profile(euro_draws, 6)
+
+    recent_main = main_draws[:10]
+    recent_euro = euro_draws[:10]
+
+    main_full_pool = list(range(MAIN_MIN, MAIN_MAX + 1))
+    euro_full_pool = list(range(EURO_MIN, EURO_MAX + 1))
+
+    hot_main_pool = sorted(main_percent_df.head(hot_main_size)["Liczba"].tolist())
+    hot_euro_pool = sorted(euro_percent_df.head(hot_euro_size)["Liczba"].tolist())
+
+    candidates = set()
+    attempts = 0
+    max_attempts = candidate_count * 3
+
+    while len(candidates) < candidate_count and attempts < max_attempts:
+        attempts += 1
+        
+        hm_part = random.sample(hot_main_pool, min(hot_main_count, len(hot_main_pool)))
+        rm_pool = [x for x in main_full_pool if x not in hm_part]
+        om_part = random.sample(rm_pool, MAIN_PICK_COUNT - len(hm_part))
+        m_ticket = tuple(sorted(hm_part + om_part))
+        
+        he_part = random.sample(hot_euro_pool, min(hot_euro_count, len(hot_euro_pool)))
+        re_pool = [x for x in euro_full_pool if x not in he_part]
+        oe_part = random.sample(re_pool, EURO_PICK_COUNT - len(he_part))
+        e_ticket = tuple(sorted(he_part + oe_part))
+        
+        candidates.add((m_ticket, e_ticket))
+
+    scored = []
+    for m_t, e_t in candidates:
+        m_score = score_main_ticket(list(m_t), main_percent_map, main_pair_counter, main_triple_counter, main_target_profile, recent_main)
+        e_score = score_euro_ticket(list(e_t), euro_percent_map, euro_pair_counter, euro_target_profile, recent_euro)
+        
+        final_score = m_score["final_score"] + e_score["final_score"]
+        scored.append({
+            "main_ticket": list(m_t),
+            "euro_ticket": list(e_t),
+            "final_score": final_score
+        })
+
+    scored.sort(key=lambda x: x["final_score"], reverse=True)
+    best = scored[:n_tickets]
+
+    out = []
+    for item in best:
+        out.append({
+            "Typ": "nowy_silnik",
+            "Main": item["main_ticket"],
+            "Euro": item["euro_ticket"]
+        })
+    return out
+
+# =========================================================
+# TURBO SCORE
+# =========================================================
 def generate_candidate_records(
     count_candidates: int,
     base_mode_kind: str,
@@ -1386,6 +1749,145 @@ def detect_cycles_cached(draws: List[List[int]], nmin: int, nmax: int) -> pd.Dat
 
 
 # =========================================================
+# WIELKA SZANSA (PROGNOZA WYKRESOWA DLA EUROJACKPOT)
+# =========================================================
+def _series_for_position(draws_newest_first: List[List[int]], pos_idx: int, window: int, pick_count: int) -> List[int]:
+    subset = draws_newest_first[:min(window, len(draws_newest_first))]
+    chronological = list(reversed(subset))
+    return [row[pos_idx] for row in chronological if len(row) == pick_count]
+
+def _linear_projection(series: List[int], recent_points: int = 8) -> float:
+    if len(series) < 2: return float(series[-1]) if series else 1.0
+    use = series[-min(recent_points, len(series)):]
+    x = np.arange(len(use), dtype=float)
+    y = np.array(use, dtype=float)
+    if len(use) == 1: return float(use[-1])
+    a, b = np.polyfit(x, y, 1)
+    return float(a * len(use) + b)
+
+def _recent_delta_projection(series: List[int], max_deltas: int = 6) -> float:
+    if len(series) < 2: return float(series[-1]) if series else 1.0
+    deltas = np.diff(series)
+    if len(deltas) == 0: return float(series[-1])
+    recent = deltas[-min(max_deltas, len(deltas)):]
+    weights = np.linspace(1.0, 2.2, len(recent))
+    step = float(np.average(recent, weights=weights))
+    return float(series[-1] + step)
+
+def _curvature_projection(series: List[int], max_points: int = 8) -> float:
+    if len(series) < 3: return _recent_delta_projection(series)
+    use = series[-min(max_points, len(series)):]
+    x = np.arange(len(use), dtype=float)
+    y = np.array(use, dtype=float)
+    if len(use) < 3: return _recent_delta_projection(series)
+    coeff = np.polyfit(x, y, 2)
+    poly = np.poly1d(coeff)
+    return float(poly(len(use)))
+
+def _normalized_step_pattern(series: List[int], step_len: int = 4) -> Optional[Tuple[int, ...]]:
+    if len(series) < step_len + 1: return None
+    deltas = np.diff(series[-(step_len + 1):])
+    clipped = [int(np.clip(round(d), -6, 6)) for d in deltas]
+    return tuple(clipped)
+
+def _pattern_match_projection(series: List[int], nmin: int, nmax: int, step_len: int = 4) -> Optional[float]:
+    if len(series) < step_len + 6: return None
+    target = _normalized_step_pattern(series, step_len=step_len)
+    if target is None: return None
+    candidates = []
+    for end_idx in range(step_len, len(series) - 1):
+        past = series[:end_idx + 1]
+        patt = _normalized_step_pattern(past, step_len=step_len)
+        if patt is None: continue
+        distance = sum(abs(a - b) for a, b in zip(target, patt))
+        if distance <= 4:
+            candidates.append((distance, series[end_idx + 1]))
+    if not candidates: return None
+    candidates.sort(key=lambda x: x[0])
+    best_vals = [v for _, v in candidates[:12]]
+    return float(sum(best_vals) / len(best_vals))
+
+def _smooth_prediction(preds: List[float], fallback: float) -> float:
+    clean = [p for p in preds if p is not None and not np.isnan(p)]
+    if not clean: return fallback
+    return float(sum(clean) / len(clean))
+
+def _enforce_sorted_forecast(raw_values: List[int], pick_count: int, nmin: int, nmax: int) -> List[int]:
+    vals = raw_values[:]
+    vals[0] = clamp(vals[0], nmin, nmax - (pick_count - 1))
+    for i in range(1, pick_count):
+        low = vals[i - 1] + 1
+        high = nmax - (pick_count - 1 - i)
+        vals[i] = clamp(vals[i], low, high)
+    vals = sorted(vals)
+    fixed = []
+    for i, v in enumerate(vals):
+        low = nmin if i == 0 else fixed[-1] + 1
+        high = nmax - (pick_count - 1 - i)
+        fixed.append(clamp(v, low, high))
+    return fixed
+
+def _score_forecast_confidence(series: List[int], predicted: int) -> float:
+    if len(series) < 6: return 0.0
+    last = series[-1]
+    deltas = np.diff(series[-8:]) if len(series) >= 8 else np.diff(series)
+    delta_std = float(np.std(deltas)) if len(deltas) > 0 else 0.0
+    step = abs(predicted - last)
+    base = 100.0
+    base -= delta_std * 8.0
+    base -= step * 2.2
+    unique_recent = len(set(series[-10:])) if len(series) >= 10 else len(set(series))
+    base += min(unique_recent, 10) * 0.8
+    return round(clamp(int(round(base)), 1, 99), 2)
+
+def build_wielka_szansa_set(draws_newest_first: List[List[int]], window: int, pick_count: int, nmin: int, nmax: int) -> Dict:
+    use_window = min(window, len(draws_newest_first))
+    subset_newest = draws_newest_first[:use_window]
+    forecast = []
+    details = []
+
+    for pos in range(pick_count):
+        series = _series_for_position(subset_newest, pos, use_window, pick_count)
+        if not series:
+            fallback = pos + 1
+            forecast.append(fallback)
+            details.append({
+                "Pozycja": pos + 1, "Ostatnia wartość": fallback, "Prognoza": fallback,
+                "Pewność %": 0.0, "Metoda": "fallback"
+            })
+            continue
+
+        last_val = float(series[-1])
+        p1 = _linear_projection(series, recent_points=8)
+        p2 = _recent_delta_projection(series, max_deltas=6)
+        p3 = _curvature_projection(series, max_points=8)
+        p4 = _pattern_match_projection(series, nmin, nmax, step_len=4)
+
+        blended = _smooth_prediction([p1, p2, p3, p4], fallback=last_val)
+        pred = int(round(blended))
+        pred = clamp(pred, nmin, nmax)
+        confidence = _score_forecast_confidence(series, pred)
+
+        used_methods = ["linia", "delta", "krzywizna"]
+        if p4 is not None: used_methods.append("wzorzec")
+
+        forecast.append(pred)
+        details.append({
+            "Pozycja": pos + 1, "Ostatnia wartość": int(series[-1]), "Prognoza": pred,
+            "Pewność %": confidence, "Metoda": ", ".join(used_methods)
+        })
+
+    forecast = _enforce_sorted_forecast(forecast, pick_count, nmin, nmax)
+    for i in range(pick_count):
+        details[i]["Prognoza_po_korekcie"] = forecast[i]
+
+    return {
+        "set": forecast, "details": details, "window_used": use_window,
+        "opis": "Prognoza dalszego przebiegu każdej pozycji na podstawie trendu, delty, krzywizny i podobnych wzorców historycznych."
+    }
+
+
+# =========================================================
 # TXT EXPORTS
 # =========================================================
 def make_txt_for_results(records: List[Dict]) -> bytes:
@@ -1521,6 +2023,48 @@ def make_txt_for_cycles(main_cycle_df: pd.DataFrame, euro_cycle_df: pd.DataFrame
         )
     return ("\n".join(lines) + "\n").encode("utf-8")
 
+def make_txt_for_zloty_strzal(zs_data: Dict) -> bytes:
+    main_str = " ".join(f"{x:02d}" for x in zs_data["main_kupon"])
+    euro_str = " ".join(f"{x:02d}" for x in zs_data["euro_kupon"])
+    lines = [
+        "🌟 ZŁOTY STRZAŁ (MOMENTUM SCORE)",
+        f"Kupon mistrzowski Main 5/50: {main_str}",
+        f"Kupon mistrzowski Euro 2/12: {euro_str}",
+        f"Średni Momentum Score (Main): {zs_data['main_score']:.2f}",
+        f"Średni Momentum Score (Euro): {zs_data['euro_score']:.2f}",
+        "",
+        "Szczegóły TOP 15 liczb MAIN według wskaźnika Momentum:"
+    ]
+    for d in zs_data["main_details"]:
+        lines.append(f"Liczba: {d['liczba']:02d} | Momentum: {d['momentum']:.2f} | Śledzenie (ost.30): {d['short_rate']:.3f} | Śledzenie (ost.999): {d['long_rate']:.3f} | Opóźnienie: {d['delay']}")
+        
+    lines.append("")
+    lines.append("Szczegóły TOP liczb EURO według wskaźnika Momentum:")
+    for d in zs_data["euro_details"]:
+        lines.append(f"Liczba: {d['liczba']:02d} | Momentum: {d['momentum']:.2f} | Śledzenie (ost.30): {d['short_rate']:.3f} | Śledzenie (ost.999): {d['long_rate']:.3f} | Opóźnienie: {d['delay']}")
+
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+def make_txt_for_wielka_szansa(ws_main: Dict, ws_euro: Dict, selected_window: int) -> bytes:
+    main_str = " ".join(f"{x:02d}" for x in ws_main["set"])
+    euro_str = " ".join(f"{x:02d}" for x in ws_euro["set"])
+    lines = [
+        "Eurojackpot Wielka Szansa — prognoza wykresowa",
+        f"Zakres analizy: {selected_window}",
+        f"Faktycznie użyty zakres (Main): {ws_main['window_used']}",
+        f"Prognoza Main 5/50: {main_str}",
+        f"Prognoza Euro 2/12: {euro_str}",
+        "",
+        "Szczegóły MAIN:"
+    ]
+    for d in ws_main["details"]:
+        lines.append(f"Pozycja {d['Pozycja']} | ostatnia={d['Ostatnia wartość']} | prognoza surowa={d['Prognoza']} | prognoza po korekcie={d['Prognoza_po_korekcie']} | pewność={d['Pewność %']} | metoda={d['Metoda']}")
+    lines.append("")
+    lines.append("Szczegóły EURO:")
+    for d in ws_euro["details"]:
+        lines.append(f"Pozycja {d['Pozycja']} | ostatnia={d['Ostatnia wartość']} | prognoza surowa={d['Prognoza']} | prognoza po korekcie={d['Prognoza_po_korekcie']} | pewność={d['Pewność %']} | metoda={d['Metoda']}")
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
 
 # =========================================================
 # FEATURE DESCRIPTIONS
@@ -1528,54 +2072,31 @@ def make_txt_for_cycles(main_cycle_df: pd.DataFrame, euro_cycle_df: pd.DataFrame
 def render_feature_descriptions():
     with st.expander("📘 Opisy funkcji aplikacji", expanded=False):
         st.markdown("""
-**⚽ Generuj kupony**  
-Tworzy kupony zgodnie z wybranym trybem: hybryda, gorące, zimne, mix albo premium.
+**⚽ Generuj kupony** Tworzy kupony zgodnie z wybranym silnikiem oraz trybem. Nowy Mocniejszy Silnik losuje tysiące wariantów osobno z puli gorących dla Main i Euro, by wybrać te z najwyższym punktowaniem.
 
-**🌿 Cyfry dnia**  
-Buduje zestaw dnia na podstawie ostatnich wyników, trendu parzyste/nieparzyste, niskie/wysokie i rozstrzału.
+**🌟 Złoty Strzał (Momentum)** Super-algorytm obliczający pęd dla każdej z 50 liczb Głównych i 12 Euro. Łączy siłę z ostatnich 30 losowań, 999 losowań oraz cykl uśpienia. Losuje unikalny zestaw probabilistycznie z olbrzymią faworyzacją liderów tabeli.
 
-**📋 Pokaż wyniki**  
-Pokazuje ostatnie wyniki Eurojackpot odczytane z `wyniki1ej.pdf` i `wyniki2ej.pdf`.
+**🌿 Cyfry dnia** Buduje zestaw dnia na podstawie ostatnich wyników, trendu parzyste/nieparzyste, niskie/wysokie i rozstrzału.
 
-**🔥 HOT SET**  
-Pokazuje najczęściej występujące liczby według procentu wystąpień w losowaniach.
+**📋 Pokaż wyniki** Pokazuje ostatnie wyniki Eurojackpot odczytane z PDF.
 
-**📐 Zestaw różnic**  
-Analizuje różnice pozycji między najnowszym losowaniem a wcześniejszymi i buduje nowy zestaw.
+**🔥 HOT SET** Pokazuje najczęściej występujące liczby według procentu wystąpień w losowaniach.
 
-**🔥 HOT MAX**  
-Buduje pełny zestaw z liczb o najwyższym procencie wystąpień.
+**📐 Zestaw różnic** Analizuje różnice pozycji między najnowszym losowaniem a wcześniejszymi.
 
-**⭐ Turbo Score**  
-Generuje wielu kandydatów i ocenia ich na podstawie:
-- procentu wystąpień,
-- par,
-- trójek (dla 5/50),
-- balansu parzyste/nieparzyste,
-- balansu niskie/wysokie,
-- rozstrzału,
-- podobieństwa do ostatnich wyników.
+**🔥 HOT MAX** Buduje pełny zestaw z liczb o najwyższym procencie wystąpień.
 
-**👑 Premium**  
-Łączy jednocześnie:
-- HOT/COLD,
-- HOT MAX,
-- zestaw różnic,
-- Turbo Score,
-- mutacje kandydatów.  
-Na końcu wybiera topowe kupony premium.
+**⭐ Turbo Score** Generuje wielu kandydatów i ocenia ich na podstawie statystyk par, trójek i profili.
 
-**🟦 Heatmapa**  
-Pokazuje mapę liczb 1–50 i 1–12 wraz z procentem wystąpień.
+**👑 Premium** Łączy jednocześnie Hot, Różnice, Turbo Score oraz mutacje kandydatów dla perfekcyjnego zestawu.
 
-**🤖 AI symulacja**  
-Uruchamia ważone symulacje losowań na podstawie historycznych procentów i pokazuje sugerowany zestaw.
+**🟦 Heatmapa** Pokazuje mapę liczb 1–50 i 1–12 wraz z procentem wystąpień.
 
-**🔄 Cykle liczb**  
-Wyszukuje liczby, które historycznie miały pewien rytm pojawiania się i sprawdza, czy są „blisko swojego cyklu”.
+**🤖 AI symulacja** Ważone symulacje losowań na podstawie historycznych procentów.
 
-**🧠 Tryb inteligentny**  
-Dodatkowe filtry ograniczające mało pożądane układy.
+**🔄 Cykle liczb** Szuka liczb z silnym rytmem matematycznym wystąpień.
+
+**🎯 Wielka Szansa** Prognoza oparta o "wykresy" każdej z 5 pozycji głównych oraz 2 pozycji dodatkowych.
         """)
 
 
@@ -1584,10 +2105,37 @@ Dodatkowe filtry ograniczające mało pożądane układy.
 # =========================================================
 def settings_panel(defaults: Dict) -> Dict:
     st.markdown('<div class="v-card">', unsafe_allow_html=True)
-    st.subheader("⚙️ Ustawienia")
+    st.subheader("🚀 Silnik generowania")
+    engine_choice = st.radio(
+        "Wybierz silnik wykorzystywany podczas kliknięcia 'GENERUJ KUPONY'",
+        ["Stara metoda (standardowa)", "Nowy mocniejszy silnik (rankingowy)"],
+        index=defaults.get("engine_choice_idx", 1)
+    )
+
+    if engine_choice == "Nowy mocniejszy silnik (rankingowy)":
+        st.write("Ustawienia Nowego Silnika:")
+        c_a, c_b, c_c = st.columns(3)
+        with c_a:
+            ne_cand = st.slider("Kandydaci do oceny na kupon", 1000, 10000, 3000, 500)
+        with c_b:
+            ne_hms = st.slider("Pula gorących (Main)", 10, 30, 20, 1)
+            ne_hes = st.slider("Pula gorących (Euro)", 3, 8, 5, 1)
+        with c_c:
+            ne_hmc = st.slider("Ile z gorących na kupon (Main)?", 1, 5, 3, 1)
+            ne_hec = st.slider("Ile z gorących na kupon (Euro)?", 0, 2, 1, 1)
+    else:
+        ne_cand = 3000
+        ne_hms = 20
+        ne_hes = 5
+        ne_hmc = 3
+        ne_hec = 1
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="v-card">', unsafe_allow_html=True)
+    st.subheader("⚙️ Ustawienia (panel główny)")
 
     mode_ui = st.selectbox(
-        "Tryb typowania",
+        "Tryb typowania (dla starej metody)",
         [
             "Hybryda 70/20/10 (hot/cold/mix)",
             "Tylko 🔥 gorące",
@@ -1595,8 +2143,7 @@ def settings_panel(defaults: Dict) -> Dict:
             "Tylko ⚗️ mix (hot+zimne)",
             "Premium 👑",
         ],
-        index=defaults.get("mode_index", 0),
-        help="Premium łączy kilka algorytmów jednocześnie."
+        index=defaults.get("mode_index", 0)
     )
 
     history_window = st.selectbox(
@@ -1609,6 +2156,12 @@ def settings_panel(defaults: Dict) -> Dict:
         "Analiza różnic pozycyjnych — zakres losowań",
         [50, 100, 250, 500, 750, 999],
         index=defaults.get("diff_hist_index", 5)
+    )
+
+    wielka_szansa_window = st.selectbox(
+        "Wielka Szansa — zakres wykresu pozycji",
+        [100, 999],
+        index=defaults.get("wielka_idx", 1)
     )
 
     c1, c2 = st.columns(2)
@@ -1707,9 +2260,16 @@ def settings_panel(defaults: Dict) -> Dict:
     st.markdown("</div>", unsafe_allow_html=True)
 
     return {
+        "engine_choice": engine_choice,
+        "new_engine_candidates": ne_cand,
+        "new_engine_hot_main_size": ne_hms,
+        "new_engine_hot_euro_size": ne_hes,
+        "new_engine_hot_main_count": ne_hmc,
+        "new_engine_hot_euro_count": ne_hec,
         "mode_ui": mode_ui,
         "history_window": int(history_window),
         "difference_window": int(difference_window),
+        "wielka_szansa_window": int(wielka_szansa_window),
         "n_tickets": int(n_tickets),
         "hot_main_size": int(hot_main_size),
         "cold_main_size": int(cold_main_size),
@@ -1751,7 +2311,7 @@ def main():
 
     st.title(APP_TITLE)
     st.write("Generator typowań Eurojackpot na bazie prawdziwych wyników z dwóch plików PDF: 5/50 i 2/12.")
-    st.caption("Wersja rozszerzona: Hot/Cold, Hot Max, Turbo Score, Premium, Heatmapy, AI symulacja i analiza cykli.")
+    st.caption("Wersja: Nowy Mocniejszy Silnik (Rankingowy) + Złoty Strzał (Momentum) + **Kompletna Wielka Szansa** dla Eurojackpot.")
 
     if "last_records" not in st.session_state:
         st.session_state["last_records"] = []
@@ -1773,6 +2333,10 @@ def main():
         st.session_state["ai_sim_result"] = None
     if "cycle_result" not in st.session_state:
         st.session_state["cycle_result"] = None
+    if "zloty_strzal_result" not in st.session_state:
+        st.session_state["zloty_strzal_result"] = None
+    if "wielka_szansa_result" not in st.session_state:
+        st.session_state["wielka_szansa_result"] = None
 
     pdf_main_path = Path(os.getcwd()) / PDF_MAIN_FILENAME
     pdf_euro_path = Path(os.getcwd()) / PDF_EURO_FILENAME
@@ -1804,9 +2368,11 @@ def main():
         st.stop()
 
     defaults = {
+        "engine_choice_idx": 1,
         "mode_index": 0,
         "hist_index": 5,
         "diff_hist_index": 5,
+        "wielka_idx": 1,
         "n_tickets": 30,
         "hot_main_size": 20,
         "cold_main_size": 20,
@@ -1842,6 +2408,9 @@ def main():
 
     main_draws = [r["main_nums"] for r in result_records]
     euro_draws = [r["euro_nums"] for r in result_records]
+    
+    all_main_draws_full = [r["main_nums"] for r in result_records_all]
+    all_euro_draws_full = [r["euro_nums"] for r in result_records_all]
 
     main_percent_df = compute_presence_percent_df_cached(main_draws, MAIN_MIN, MAIN_MAX)
     euro_percent_df = compute_presence_percent_df_cached(euro_draws, EURO_MIN, EURO_MAX)
@@ -1889,16 +2458,23 @@ def main():
 
         st.markdown('<div class="v-card">', unsafe_allow_html=True)
         st.subheader("🎛️ Wybrany tryb")
-        st.write(f"**Tryb:** {cfg['mode_ui']}")
-        st.write(f"**Analiza HOT/COLD:** ostatnie **{history_window_used}** losowań")
-        st.write(f"**AI symulacja:** {cfg['ai_sim_count']} losowań")
-        st.write(f"**Tryb inteligentny:** {'TAK' if cfg['smart_enabled'] else 'NIE'}")
+        st.write(f"**Silnik:** {cfg['engine_choice']}")
+        if cfg['engine_choice'] == "Stara metoda (standardowa)":
+            st.write(f"**Tryb UI:** {cfg['mode_ui']}")
+        st.write(f"**Analiza HOT/COLD:** {history_window_used} losowań")
+        st.write(f"**Wielka Szansa:** zakres {cfg['wielka_szansa_window']}")
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
 
     st.markdown('<div class="v-card">', unsafe_allow_html=True)
     st.subheader("🎟️ Narzędzia")
+
+    # Przycisk na Złoty Strzał - Stochastyczny Momentum AI
+    st.markdown('<div class="btn-gold">', unsafe_allow_html=True)
+    zloty_strzal_btn = st.button("🌟 ZŁOTY STRZAŁ (MOMENTUM SCORE)", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.write("")
 
     c1, c2, c3, c4 = st.columns(4, gap="large")
     with c1:
@@ -1914,11 +2490,13 @@ def main():
         build_premium = st.button("👑 PREMIUM", type="primary", use_container_width=True)
         build_ai_sim = st.button("🤖 AI SYMULACJA", type="primary", use_container_width=True)
 
-    c5, c6 = st.columns(2, gap="large")
+    c5, c6, c7 = st.columns(3, gap="large")
     with c5:
         build_heatmap = st.button("🟦 HEATMAPY", type="primary", use_container_width=True)
     with c6:
         build_cycles = st.button("🔄 CYKLE LICZB", type="primary", use_container_width=True)
+    with c7:
+        build_wielka_szansa = st.button("🎯 WIELKA SZANSA", type="primary", use_container_width=True)
 
     if show_res:
         st.session_state["show_results"] = not st.session_state["show_results"]
@@ -1926,11 +2504,19 @@ def main():
     if show_hot:
         st.session_state["hot_set"] = {"main": hot_main_set, "euro": hot_euro_set}
 
+    if zloty_strzal_btn:
+        st.session_state["zloty_strzal_result"] = build_zloty_strzal_momentum_eurojackpot(all_main_draws_full, all_euro_draws_full)
+
     if build_diff:
         st.session_state["difference_set"] = {
-            "main": build_positional_difference_set(main_draws, cfg["difference_window"], MAIN_PICK_COUNT, MAIN_MIN, MAIN_MAX),
-            "euro": build_positional_difference_set(euro_draws, cfg["difference_window"], EURO_PICK_COUNT, EURO_MIN, EURO_MAX)
+            "main": build_positional_difference_set(all_main_draws_full, cfg["difference_window"], MAIN_PICK_COUNT, MAIN_MIN, MAIN_MAX),
+            "euro": build_positional_difference_set(all_euro_draws_full, cfg["difference_window"], EURO_PICK_COUNT, EURO_MIN, EURO_MAX)
         }
+
+    if build_wielka_szansa:
+        ws_main = build_wielka_szansa_set(all_main_draws_full, cfg["wielka_szansa_window"], MAIN_PICK_COUNT, MAIN_MIN, MAIN_MAX)
+        ws_euro = build_wielka_szansa_set(all_euro_draws_full, cfg["wielka_szansa_window"], EURO_PICK_COUNT, EURO_MIN, EURO_MAX)
+        st.session_state["wielka_szansa_result"] = {"main": ws_main, "euro": ws_euro}
 
     if build_turbo:
         base_mode_kind = "hybrid"
@@ -2071,90 +2657,105 @@ def main():
         progress = st.progress(0)
         status = st.empty()
 
-        with st.spinner("Generuję kupony Eurojackpot..."):
-            if base_mode_kind == "premium":
-                premium_result_local = build_premium_ranking(
+        if cfg["engine_choice"] == "Nowy mocniejszy silnik (rankingowy)":
+            with st.spinner("Nowy silnik losuje i ocenia kandydatów dla obu pul..."):
+                recs = run_new_stronger_engine_eurojackpot(
                     main_draws=main_draws,
                     euro_draws=euro_draws,
-                    hot_main=hot_main,
-                    cold_main=cold_main,
-                    hot_euro=hot_euro,
-                    cold_euro=cold_euro,
-                    mix_main_hot_count=cfg["mix_main_hot_count"],
-                    mix_euro_hot_count=cfg["mix_euro_hot_count"],
-                    candidate_count=cfg["premium_candidate_count"],
-                    top_n=cfg["premium_top_n"]
+                    n_tickets=int(cfg["n_tickets"]),
+                    candidate_count=cfg["new_engine_candidates"],
+                    hot_main_size=cfg["new_engine_hot_main_size"],
+                    hot_main_count=cfg["new_engine_hot_main_count"],
+                    hot_euro_size=cfg["new_engine_hot_euro_size"],
+                    hot_euro_count=cfg["new_engine_hot_euro_count"]
                 )
-                st.session_state["premium_result"] = premium_result_local
-                premium_rows = premium_result_local["rows"]
+                progress.progress(100)
+                status.write(f"Wygenerowano {len(recs)} najlepszych kuponów Nowym Silnikiem!")
+        else:
+            with st.spinner("Generuję kupony Eurojackpot stara metodą..."):
+                if base_mode_kind == "premium":
+                    premium_result_local = build_premium_ranking(
+                        main_draws=main_draws,
+                        euro_draws=euro_draws,
+                        hot_main=hot_main,
+                        cold_main=cold_main,
+                        hot_euro=hot_euro,
+                        cold_euro=cold_euro,
+                        mix_main_hot_count=cfg["mix_main_hot_count"],
+                        mix_euro_hot_count=cfg["mix_euro_hot_count"],
+                        candidate_count=cfg["premium_candidate_count"],
+                        top_n=cfg["premium_top_n"]
+                    )
+                    st.session_state["premium_result"] = premium_result_local
+                    premium_rows = premium_result_local["rows"]
 
-                recs = []
-                total = min(int(cfg["n_tickets"]), len(premium_rows))
-                for i in range(total):
-                    recs.append({
-                        "Typ": "premium",
-                        "Main": [int(x) for x in premium_rows[i]["Main 5/50"].split()],
-                        "Euro": [int(x) for x in premium_rows[i]["Euro 2/12"].split()],
-                    })
-                    progress.progress(int((i + 1) / total * 100))
-                    status.write(f"Postęp: {i+1}/{total}")
-
-            elif hot_max_mode_active:
-                hot_max_main_set, hot_max_main_table = build_hot_max_set(main_percent_df, MAIN_PICK_COUNT)
-                hot_max_euro_set, hot_max_euro_table = build_hot_max_set(euro_percent_df, EURO_PICK_COUNT)
-
-                recs = []
-                total = int(cfg["n_tickets"])
-                for i in range(total):
-                    recs.append({
-                        "Typ": "hot_max",
-                        "Main": hot_max_main_set,
-                        "Euro": hot_max_euro_set,
-                        "HotMaxMainTable": hot_max_main_table,
-                        "HotMaxEuroTable": hot_max_euro_table
-                    })
-                    if (i + 1) % 10 == 0 or (i + 1) == total:
+                    recs = []
+                    total = min(int(cfg["n_tickets"]), len(premium_rows))
+                    for i in range(total):
+                        recs.append({
+                            "Typ": "premium",
+                            "Main": [int(x) for x in premium_rows[i]["Main 5/50"].split()],
+                            "Euro": [int(x) for x in premium_rows[i]["Euro 2/12"].split()],
+                        })
                         progress.progress(int((i + 1) / total * 100))
                         status.write(f"Postęp: {i+1}/{total}")
 
-                st.session_state["hot_max_set"] = {
-                    "main_set": hot_max_main_set,
-                    "euro_set": hot_max_euro_set,
-                    "main_table": hot_max_main_table,
-                    "euro_table": hot_max_euro_table,
-                    "window": history_window_used
-                }
+                elif hot_max_mode_active:
+                    hot_max_main_set, hot_max_main_table = build_hot_max_set(main_percent_df, MAIN_PICK_COUNT)
+                    hot_max_euro_set, hot_max_euro_table = build_hot_max_set(euro_percent_df, EURO_PICK_COUNT)
 
-            else:
-                if not cfg["smart_enabled"]:
                     recs = []
                     total = int(cfg["n_tickets"])
                     for i in range(total):
-                        recs.append(gen_one_record())
+                        recs.append({
+                            "Typ": "hot_max",
+                            "Main": hot_max_main_set,
+                            "Euro": hot_max_euro_set,
+                            "HotMaxMainTable": hot_max_main_table,
+                            "HotMaxEuroTable": hot_max_euro_table
+                        })
                         if (i + 1) % 10 == 0 or (i + 1) == total:
                             progress.progress(int((i + 1) / total * 100))
                             status.write(f"Postęp: {i+1}/{total}")
-                else:
-                    smart_kwargs_main = {
-                        "block_run_2": cfg["block_run_2"],
-                        "block_run_3": cfg["block_run_3"],
-                        "max_adjacent_pairs": cfg["max_adj_pairs"],
-                        "even_odd_choice": cfg["even_odd_choice_main"]
-                    }
-                    smart_kwargs_euro = {
-                        "euro_no_consecutive": cfg["euro_no_consecutive"],
-                        "euro_even_odd_choice": cfg["even_odd_choice_euro"]
+
+                    st.session_state["hot_max_set"] = {
+                        "main_set": hot_max_main_set,
+                        "euro_set": hot_max_euro_set,
+                        "main_table": hot_max_main_table,
+                        "euro_table": hot_max_euro_table,
+                        "window": history_window_used
                     }
 
-                    recs = generate_with_smart_filters(
-                        gen_func=gen_one_record,
-                        n_tickets=int(cfg["n_tickets"]),
-                        max_attempts_per_ticket=int(cfg["max_attempts_per_ticket"]),
-                        smart_kwargs_main=smart_kwargs_main,
-                        smart_kwargs_euro=smart_kwargs_euro
-                    )
-                    progress.progress(100)
-                    status.write(f"Postęp: {len(recs)}/{int(cfg['n_tickets'])}")
+                else:
+                    if not cfg["smart_enabled"]:
+                        recs = []
+                        total = int(cfg["n_tickets"])
+                        for i in range(total):
+                            recs.append(gen_one_record())
+                            if (i + 1) % 10 == 0 or (i + 1) == total:
+                                progress.progress(int((i + 1) / total * 100))
+                                status.write(f"Postęp: {i+1}/{total}")
+                    else:
+                        smart_kwargs_main = {
+                            "block_run_2": cfg["block_run_2"],
+                            "block_run_3": cfg["block_run_3"],
+                            "max_adjacent_pairs": cfg["max_adj_pairs"],
+                            "even_odd_choice": cfg["even_odd_choice_main"]
+                        }
+                        smart_kwargs_euro = {
+                            "euro_no_consecutive": cfg["euro_no_consecutive"],
+                            "euro_even_odd_choice": cfg["even_odd_choice_euro"]
+                        }
+
+                        recs = generate_with_smart_filters(
+                            gen_func=gen_one_record,
+                            n_tickets=int(cfg["n_tickets"]),
+                            max_attempts_per_ticket=int(cfg["max_attempts_per_ticket"]),
+                            smart_kwargs_main=smart_kwargs_main,
+                            smart_kwargs_euro=smart_kwargs_euro
+                        )
+                        progress.progress(100)
+                        status.write(f"Postęp: {len(recs)}/{int(cfg['n_tickets'])}")
 
         progress.empty()
         status.empty()
@@ -2192,6 +2793,46 @@ def main():
     # =========================================================
     # OUTPUT SECTIONS
     # =========================================================
+    if st.session_state.get("wielka_szansa_result") is not None:
+        ws = st.session_state["wielka_szansa_result"]
+        ws_main = ws["main"]
+        ws_euro = ws["euro"]
+        
+        main_str = " ".join(f"{x:02d}" for x in ws_main["set"])
+        euro_str = " ".join(f"{x:02d}" for x in ws_euro["set"])
+
+        st.markdown("### 🎯 Wielka Szansa")
+        st.markdown(f'<div class="v-row-danger"><b>Prognoza wykresowa Main 5/50</b> — {main_str}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="v-row-danger"><b>Prognoza wykresowa Euro 2/12</b> — {euro_str}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="v-muted">{ws_main["opis"]} Użyto osi czasu dla {ws_main["window_used"]} losowań.</div>', unsafe_allow_html=True)
+        
+        st.markdown("#### Szczegóły MAIN (5 pozycji)")
+        render_wielka_szansa_cards(ws_main["details"])
+        
+        st.markdown("#### Szczegóły EURO (2 pozycje)")
+        render_wielka_szansa_cards(ws_euro["details"])
+
+        ws_name = sanitize_txt_filename(st.text_input("Nazwa pliku Wielka Szansa .txt", value="euro_wielka_szansa.txt"))
+        st.download_button(
+            "⬇️ Pobierz Wielką Szansę jako TXT",
+            data=make_txt_for_wielka_szansa(ws_main, ws_euro, cfg["wielka_szansa_window"]),
+            file_name=ws_name,
+            mime="text/plain",
+            use_container_width=True
+        )
+
+    if st.session_state.get("zloty_strzal_result") is not None:
+        zs = st.session_state["zloty_strzal_result"]
+        render_zloty_strzal_card(zs)
+        with st.expander("📊 Zobacz statystyki Momentum (Dlaczego te liczby?)"):
+            st.markdown("**TOP 15 MAIN (5/50)**")
+            st.dataframe(pd.DataFrame(zs["main_details"]), use_container_width=True, hide_index=True)
+            st.markdown("**TOP EURO (2/12)**")
+            st.dataframe(pd.DataFrame(zs["euro_details"]), use_container_width=True, hide_index=True)
+            
+        zloty_name = sanitize_txt_filename(st.text_input("Nazwa pliku Złoty Strzał .txt", value="euro_zloty_strzal.txt"))
+        st.download_button("⬇️ Pobierz Złoty Strzał jako TXT", data=make_txt_for_zloty_strzal(zs), file_name=zloty_name, mime="text/plain", use_container_width=True)
+
     if st.session_state["show_results"]:
         st.markdown("### 📋 Ostatnie wyniki Eurojackpot")
         count_choice = st.selectbox("Ile ostatnich wyników pokazać?", [10, 50, 100], index=0)
