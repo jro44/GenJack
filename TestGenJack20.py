@@ -6,32 +6,31 @@ import random
 import itertools
 from dataclasses import dataclass
 from collections import Counter, defaultdict
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 
 import fitz  # PyMuPDF
 import streamlit as st
 
 
 # ============================================================
-# KONFIGURACJA GŁÓWNA
+# KONFIGURACJA
 # ============================================================
 
 APP_TITLE = "EuroJackpot PRO Analyzer"
 APP_SUBTITLE = "Analiza PDF + częstotliwości + wzorce + generator kuponów"
 
-DEFAULT_MAIN_PDF = "wyniki1ej.pdf"   # 5 z 50
-DEFAULT_EURO_PDF = "wyniki2ej.pdf"   # 2 z 12
+DEFAULT_MAIN_PDF = "wyniki1ej.pdf"   # 5/50
+DEFAULT_EURO_PDF = "wyniki2ej.pdf"   # 2/12
 
 MAX_DRAWS_DEFAULT = 999
-RANDOM_SEED_DEFAULT = 42
+DEFAULT_TICKETS_COUNT = 5
+DEFAULT_RANDOM_SEED = 42
 
 MAIN_MIN = 1
 MAIN_MAX = 50
-
 EURO_MIN = 1
 EURO_MAX = 12
 
-# Domyślne wagi generatora
 DEFAULT_WEIGHT_FREQ = 0.35
 DEFAULT_WEIGHT_RECENCY = 0.20
 DEFAULT_WEIGHT_OVERDUE = 0.15
@@ -43,13 +42,12 @@ DEFAULT_HOT_POOL_MAIN = 20
 DEFAULT_HOT_POOL_EURO = 6
 DEFAULT_GENERATION_ATTEMPTS = 5000
 
-# Zakresy okien czasowych
 RECENCY_WINDOWS_MAIN = (20, 50, 100, 200)
 RECENCY_WINDOWS_EURO = (20, 50, 100, 200)
 
 
 # ============================================================
-# MODELE DANYCH
+# MODELE
 # ============================================================
 
 @dataclass
@@ -61,16 +59,16 @@ class Draw:
 
 @dataclass
 class AnalyzerConfig:
-    weight_freq: float = DEFAULT_WEIGHT_FREQ
-    weight_recency: float = DEFAULT_WEIGHT_RECENCY
-    weight_overdue: float = DEFAULT_WEIGHT_OVERDUE
-    weight_pair: float = DEFAULT_WEIGHT_PAIR
-    weight_triple: float = DEFAULT_WEIGHT_TRIPLE
-    weight_pattern: float = DEFAULT_WEIGHT_PATTERN
-    hot_pool_main: int = DEFAULT_HOT_POOL_MAIN
-    hot_pool_euro: int = DEFAULT_HOT_POOL_EURO
-    generation_attempts: int = DEFAULT_GENERATION_ATTEMPTS
-    seed: int = RANDOM_SEED_DEFAULT
+    weight_freq: float
+    weight_recency: float
+    weight_overdue: float
+    weight_pair: float
+    weight_triple: float
+    weight_pattern: float
+    hot_pool_main: int
+    hot_pool_euro: int
+    generation_attempts: int
+    seed: int
 
 
 # ============================================================
@@ -81,10 +79,6 @@ def safe_percent(part: int, whole: int) -> float:
     if whole == 0:
         return 0.0
     return (part / whole) * 100.0
-
-
-def sorted_tuple(nums: List[int]) -> Tuple[int, ...]:
-    return tuple(sorted(nums))
 
 
 def format_num(n: int) -> str:
@@ -104,18 +98,6 @@ def zscore(value: float, values: List[float]) -> float:
     if std == 0:
         return 0.0
     return (value - mean) / std
-
-
-def normalize_weights(scores: Dict[int, float]) -> Dict[int, float]:
-    if not scores:
-        return {}
-    min_score = min(scores.values())
-    shifted = {k: (v - min_score + 0.1) for k, v in scores.items()}
-    return shifted
-
-
-def unique_sorted(nums: List[int]) -> bool:
-    return nums == sorted(nums) and len(nums) == len(set(nums))
 
 
 def count_even(nums: List[int]) -> int:
@@ -145,15 +127,21 @@ def max_consecutive_run(nums: List[int]) -> int:
     return best
 
 
-def ensure_bytesio(uploaded_file) -> io.BytesIO:
+def normalize_weights(scores: Dict[int, float]) -> Dict[int, float]:
+    if not scores:
+        return {}
+    min_score = min(scores.values())
+    return {k: (v - min_score + 0.1) for k, v in scores.items()}
+
+
+def make_bytesio_from_upload(uploaded_file) -> io.BytesIO:
     if uploaded_file is None:
-        raise ValueError("Brak pliku wejściowego.")
-    data = uploaded_file.read()
-    return io.BytesIO(data)
+        raise ValueError("Brak pliku.")
+    return io.BytesIO(uploaded_file.read())
 
 
 # ============================================================
-# ODCZYT PDF
+# PDF
 # ============================================================
 
 def open_pdf_document(pdf_source):
@@ -177,225 +165,131 @@ def open_pdf_document(pdf_source):
     raise TypeError("Nieobsługiwany typ źródła PDF.")
 
 
-def extract_pages_text(pdf_source) -> List[str]:
+def extract_text_from_pdf(pdf_source) -> str:
     doc = open_pdf_document(pdf_source)
-    pages = []
+    chunks = []
     for page in doc:
-        pages.append(page.get_text("text"))
+        chunks.append(page.get_text("text"))
     doc.close()
-    return pages
-
-
-def extract_pages_words(pdf_source) -> List[List[str]]:
-    """
-    Zwraca listę stron, a dla każdej strony listę tokenów/słów
-    pobranych przez get_text('words'), posortowanych wg pozycji.
-    """
-    doc = open_pdf_document(pdf_source)
-    pages_tokens = []
-
-    for page in doc:
-        words = page.get_text("words")
-        # words: (x0, y0, x1, y1, "text", block_no, line_no, word_no)
-        words_sorted = sorted(words, key=lambda w: (round(w[1], 1), w[0]))
-        tokens = [str(w[4]).strip() for w in words_sorted if str(w[4]).strip()]
-        pages_tokens.append(tokens)
-
-    doc.close()
-    return pages_tokens
+    return "\n".join(chunks)
 
 
 # ============================================================
-# PARSER POMOCNICZY
+# PARSER POD TEN KONKRETNY FORMAT PDF
 # ============================================================
 
 DRAW_ID_RE = re.compile(r"^\d{4}$")
-TWO_DIGIT_RE = re.compile(r"^\d{2}$")
+MAIN_ROW_RE = re.compile(r"^\d{2}\s+\d{2}\s+\d{2}\s+\d{2}\s+\d{2}$")
+EURO_ROW_RE = re.compile(r"^\d{2}\s+\d{2}$")
 
 
-def is_draw_id_token(token: str) -> bool:
-    if not DRAW_ID_RE.match(token):
-        return False
-    value = int(token)
-    # dodatkowy filtr bezpieczeństwa
-    return 1 <= value <= 9999
-
-
-def is_main_number_token(token: str) -> bool:
-    if not TWO_DIGIT_RE.match(token):
-        return False
-    value = int(token)
-    return MAIN_MIN <= value <= MAIN_MAX
-
-
-def is_euro_number_token(token: str) -> bool:
-    if not TWO_DIGIT_RE.match(token):
-        return False
-    value = int(token)
-    return EURO_MIN <= value <= EURO_MAX
-
-
-def group_draw_ids_per_page(page_tokens: List[str]) -> List[int]:
+def parse_main_pdf(pdf_source, max_draws: int = 999) -> Tuple[Dict[int, List[int]], Dict]:
     """
-    Wyciąga ID losowań z danej strony.
-    W PDF z tabelą zwykle występują jako osobne 4-cyfrowe tokeny.
+    Parser dla pliku wyniki1ej.pdf (EuroJackpot 5/50)
+    szyty dokładnie pod format z przesłanych PDF.
     """
-    draw_ids = []
-    for token in page_tokens:
-        if is_draw_id_token(token):
-            draw_ids.append(int(token))
-    return draw_ids
 
-
-def extract_candidate_number_tokens(page_tokens: List[str], kind: str) -> List[int]:
-    """
-    kind:
-    - 'main' => 1..50
-    - 'euro' => 1..12
-    """
-    out = []
-    for token in page_tokens:
-        if kind == "main":
-            if is_main_number_token(token):
-                out.append(int(token))
-        else:
-            if is_euro_number_token(token):
-                out.append(int(token))
-    return out
-
-
-def rows_from_sequence_strict(tokens: List[int], row_size: int) -> List[List[int]]:
-    """
-    Surowe składanie wierszy: bierzemy tylko ciągi:
-    - rosnące
-    - bez powtórzeń
-    - o dokładnym rozmiarze row_size
-    Przesuwamy okno elastycznie.
-    """
-    rows = []
-    i = 0
-    while i <= len(tokens) - row_size:
-        chunk = tokens[i:i + row_size]
-        if chunk == sorted(chunk) and len(set(chunk)) == row_size:
-            rows.append(chunk)
-            i += row_size
-        else:
-            i += 1
-    return rows
-
-
-def rows_from_text_lines(text: str, row_size: int, low: int, high: int) -> List[List[int]]:
-    """
-    Parser awaryjny po liniach tekstowych.
-    """
-    rows = []
+    text = extract_text_from_pdf(pdf_source)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
+    rows = []
+    draw_ids = []
+
     for line in lines:
-        parts = re.findall(r"\b\d{2}\b", line)
-        if len(parts) != row_size:
-            continue
-
-        nums = [int(x) for x in parts]
-        if all(low <= x <= high for x in nums) and nums == sorted(nums) and len(set(nums)) == row_size:
-            rows.append(nums)
-
-    return rows
-
-
-def parse_pdf_draw_map(pdf_source, kind: str, max_draws: int = 999, debug: bool = False) -> Tuple[Dict[int, List[int]], Dict]:
-    """
-    Parser ogólny dla:
-    - kind='main' => 5/50
-    - kind='euro' => 2/12
-
-    Zwraca:
-    - mapę draw_id -> numbers
-    - diagnostykę
-    """
-    if kind not in ("main", "euro"):
-        raise ValueError("kind musi być 'main' albo 'euro'")
-
-    row_size = 5 if kind == "main" else 2
-    low = MAIN_MIN if kind == "main" else EURO_MIN
-    high = MAIN_MAX if kind == "main" else EURO_MAX
-
-    pages_tokens = extract_pages_words(pdf_source)
-    pages_text = extract_pages_text(pdf_source)
-
-    all_draw_ids = []
-    all_rows = []
+        if MAIN_ROW_RE.match(line):
+            nums = [int(x) for x in line.split()]
+            if len(nums) == 5 and nums == sorted(nums) and len(set(nums)) == 5:
+                if all(MAIN_MIN <= x <= MAIN_MAX for x in nums):
+                    rows.append(nums)
+        elif DRAW_ID_RE.match(line):
+            draw_id = int(line)
+            draw_ids.append(draw_id)
 
     diagnostics = {
-        "kind": kind,
-        "pages": len(pages_tokens),
-        "page_info": [],
-        "total_draw_ids_found": 0,
-        "total_rows_found_words": 0,
-        "total_rows_found_text": 0,
+        "file_type": "5/50",
+        "rows_found": len(rows),
+        "draw_ids_found": len(draw_ids),
+        "rows_preview": rows[:20],
+        "draw_ids_preview": draw_ids[:20],
     }
 
-    for page_index, (page_tokens, page_text) in enumerate(zip(pages_tokens, pages_text), start=1):
-        page_draw_ids = group_draw_ids_per_page(page_tokens)
+    if not rows:
+        raise ValueError("Nie znaleziono żadnych wierszy 5/50 w pliku wyniki1ej.pdf.")
 
-        candidate_tokens = extract_candidate_number_tokens(page_tokens, kind=kind)
-        rows_words = rows_from_sequence_strict(candidate_tokens, row_size=row_size)
-        rows_text = rows_from_text_lines(page_text, row_size=row_size, low=low, high=high)
+    if not draw_ids:
+        raise ValueError("Nie znaleziono numerów losowań w pliku wyniki1ej.pdf.")
 
-        # Łączymy wyniki z priorytetem dla words, bo zwykle lepiej czyta tabelę
-        rows_page = rows_words if len(rows_words) >= len(rows_text) else rows_text
-
-        diagnostics["page_info"].append({
-            "page": page_index,
-            "draw_ids_found": len(page_draw_ids),
-            "candidate_tokens_count": len(candidate_tokens),
-            "rows_from_words": len(rows_words),
-            "rows_from_text": len(rows_text),
-            "rows_selected": len(rows_page),
-            "first_tokens_preview": page_tokens[:80],
-            "first_text_preview": page_text[:1000],
-        })
-
-        diagnostics["total_draw_ids_found"] += len(page_draw_ids)
-        diagnostics["total_rows_found_words"] += len(rows_words)
-        diagnostics["total_rows_found_text"] += len(rows_text)
-
-        all_draw_ids.extend(page_draw_ids)
-        all_rows.extend(rows_page)
-
-    if not all_draw_ids:
-        raise ValueError(f"Nie znaleziono numerów losowań w pliku {kind}.")
-
-    if not all_rows:
-        raise ValueError(f"Nie znaleziono poprawnych układów {row_size} liczb w pliku {kind}.")
-
-    usable = min(len(all_draw_ids), len(all_rows), max_draws)
+    usable = min(len(rows), len(draw_ids), max_draws)
 
     result = {}
     for i in range(usable):
-        result[all_draw_ids[i]] = sorted(all_rows[i])
+        result[draw_ids[i]] = rows[i]
 
     if not result:
-        raise ValueError(f"Nie udało się zbudować mapy losowań dla pliku {kind}.")
+        raise ValueError("Nie udało się zbudować mapy losowań dla pliku wyniki1ej.pdf.")
 
     diagnostics["usable"] = usable
-    diagnostics["draw_ids_preview"] = all_draw_ids[:20]
-    diagnostics["rows_preview"] = all_rows[:20]
+    diagnostics["first_draw_id"] = draw_ids[0] if draw_ids else None
+    diagnostics["last_draw_id"] = draw_ids[usable - 1] if usable > 0 else None
 
     return result, diagnostics
 
 
-def parse_main_pdf(pdf_source, max_draws: int = 999, debug: bool = False) -> Tuple[Dict[int, List[int]], Dict]:
-    return parse_pdf_draw_map(pdf_source, kind="main", max_draws=max_draws, debug=debug)
+def parse_euro_pdf(pdf_source, max_draws: int = 999) -> Tuple[Dict[int, List[int]], Dict]:
+    """
+    Parser dla pliku wyniki2ej.pdf (EuroJackpot 2/12)
+    szyty dokładnie pod format z przesłanych PDF.
+    """
+
+    text = extract_text_from_pdf(pdf_source)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    rows = []
+    draw_ids = []
+
+    for line in lines:
+        if EURO_ROW_RE.match(line):
+            nums = [int(x) for x in line.split()]
+            if len(nums) == 2 and nums == sorted(nums) and len(set(nums)) == 2:
+                if all(EURO_MIN <= x <= EURO_MAX for x in nums):
+                    rows.append(nums)
+        elif DRAW_ID_RE.match(line):
+            draw_id = int(line)
+            draw_ids.append(draw_id)
+
+    diagnostics = {
+        "file_type": "2/12",
+        "rows_found": len(rows),
+        "draw_ids_found": len(draw_ids),
+        "rows_preview": rows[:20],
+        "draw_ids_preview": draw_ids[:20],
+    }
+
+    if not rows:
+        raise ValueError("Nie znaleziono żadnych wierszy 2/12 w pliku wyniki2ej.pdf.")
+
+    if not draw_ids:
+        raise ValueError("Nie znaleziono numerów losowań w pliku wyniki2ej.pdf.")
+
+    usable = min(len(rows), len(draw_ids), max_draws)
+
+    result = {}
+    for i in range(usable):
+        result[draw_ids[i]] = rows[i]
+
+    if not result:
+        raise ValueError("Nie udało się zbudować mapy losowań dla pliku wyniki2ej.pdf.")
+
+    diagnostics["usable"] = usable
+    diagnostics["first_draw_id"] = draw_ids[0] if draw_ids else None
+    diagnostics["last_draw_id"] = draw_ids[usable - 1] if usable > 0 else None
+
+    return result, diagnostics
 
 
-def parse_euro_pdf(pdf_source, max_draws: int = 999, debug: bool = False) -> Tuple[Dict[int, List[int]], Dict]:
-    return parse_pdf_draw_map(pdf_source, kind="euro", max_draws=max_draws, debug=debug)
-
-
-def load_draws(main_pdf_source, euro_pdf_source, max_draws: int = 999, debug: bool = False):
-    main_map, main_diag = parse_main_pdf(main_pdf_source, max_draws=max_draws, debug=debug)
-    euro_map, euro_diag = parse_euro_pdf(euro_pdf_source, max_draws=max_draws, debug=debug)
+def load_draws(main_pdf_source, euro_pdf_source, max_draws: int = 999):
+    main_map, main_diag = parse_main_pdf(main_pdf_source, max_draws=max_draws)
+    euro_map, euro_diag = parse_euro_pdf(euro_pdf_source, max_draws=max_draws)
 
     common_ids = sorted(set(main_map.keys()) & set(euro_map.keys()), reverse=True)
 
@@ -431,6 +325,7 @@ class EuroJackpotAnalyzer:
         self.draws = sorted(draws, key=lambda d: d.draw_id, reverse=True)
         self.total_draws = len(self.draws)
         self.config = config
+        self.random = random.Random(config.seed)
 
         self.main_counter = Counter()
         self.euro_counter = Counter()
@@ -453,8 +348,6 @@ class EuroJackpotAnalyzer:
 
         self.main_positional_counter = [Counter() for _ in range(5)]
         self.euro_positional_counter = [Counter() for _ in range(2)]
-
-        self.random = random.Random(self.config.seed)
 
         self._analyze()
 
@@ -517,7 +410,7 @@ class EuroJackpotAnalyzer:
                 self.euro_last_seen[n] = self.total_draws
 
     # --------------------------------------------------------
-    # CZĘSTOTLIWOŚCI
+    # CZĘSTOTLIWOŚĆ
     # --------------------------------------------------------
 
     def main_frequency_percent(self) -> Dict[int, float]:
@@ -580,7 +473,7 @@ class EuroJackpotAnalyzer:
         return repeated[:top_n]
 
     # --------------------------------------------------------
-    # REGENCY / OKNA CZASOWE
+    # OKNA CZASOWE
     # --------------------------------------------------------
 
     def _recency_window_counts_main(self, windows=RECENCY_WINDOWS_MAIN) -> Dict[int, float]:
@@ -688,7 +581,7 @@ class EuroJackpotAnalyzer:
         return scores
 
     # --------------------------------------------------------
-    # WALIDACJA KUPONÓW
+    # WALIDACJA KUPONU
     # --------------------------------------------------------
 
     def validate_main_ticket(self, nums: List[int]) -> bool:
@@ -705,8 +598,7 @@ class EuroJackpotAnalyzer:
         if lows not in (2, 3):
             return False
 
-        run = max_consecutive_run(nums)
-        if run > 2:
+        if max_consecutive_run(nums) > 2:
             return False
 
         spread = nums[-1] - nums[0]
@@ -719,9 +611,6 @@ class EuroJackpotAnalyzer:
         nums = sorted(nums)
 
         if len(nums) != 2 or len(set(nums)) != 2:
-            return False
-
-        if nums[0] == nums[1]:
             return False
 
         return True
@@ -776,6 +665,7 @@ class EuroJackpotAnalyzer:
         lows = count_low_euro(nums)
         score += self.euro_even_odd_patterns[(evens, 2 - evens)] * 0.03
         score += self.euro_low_high_patterns[(lows, 2 - lows)] * 0.03
+
         return score
 
     def generate_ticket(self) -> Tuple[List[int], List[int]]:
@@ -849,23 +739,23 @@ class EuroJackpotAnalyzer:
 
     def generate_multiple_tickets(self, count: int = 5) -> List[Tuple[List[int], List[int]]]:
         seen = set()
-        out = []
+        results = []
 
         attempts = 0
-        max_attempts = max(count * 50, 200)
+        max_attempts = max(200, count * 60)
 
-        while len(out) < count and attempts < max_attempts:
+        while len(results) < count and attempts < max_attempts:
             attempts += 1
             main_nums, euro_nums = self.generate_ticket()
             key = (tuple(main_nums), tuple(euro_nums))
             if key not in seen:
                 seen.add(key)
-                out.append((main_nums, euro_nums))
+                results.append((main_nums, euro_nums))
 
-        return out
+        return results
 
     # --------------------------------------------------------
-    # TABELE POD STREAMLIT
+    # TABELE POD UI
     # --------------------------------------------------------
 
     def get_main_frequency_table(self) -> List[Dict]:
@@ -912,11 +802,29 @@ class EuroJackpotAnalyzer:
             })
         return rows
 
+    def get_main_fullsets_table(self, top_n: int = 10) -> List[Dict]:
+        rows = []
+        for fullset, count in self.top_main_fullsets(top_n):
+            rows.append({
+                "Układ 5/50": " ".join(format_num(x) for x in fullset),
+                "Powtórzenia": count,
+            })
+        return rows
+
     def get_euro_pairs_table(self, top_n: int = 15) -> List[Dict]:
         rows = []
         for pair, count in self.top_euro_pairs(top_n):
             rows.append({
                 "Para 2/12": " ".join(format_num(x) for x in pair),
+                "Powtórzenia": count,
+            })
+        return rows
+
+    def get_euro_fullsets_table(self, top_n: int = 10) -> List[Dict]:
+        rows = []
+        for fullset, count in self.top_euro_fullsets(top_n):
+            rows.append({
+                "Układ 2/12": " ".join(format_num(x) for x in fullset),
                 "Powtórzenia": count,
             })
         return rows
@@ -932,9 +840,29 @@ class EuroJackpotAnalyzer:
             })
         return rows
 
+    def get_main_scores_table(self) -> List[Dict]:
+        scores = self.compute_main_scores()
+        rows = []
+        for n, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+            rows.append({
+                "Liczba 5/50": format_num(n),
+                "Score": round(score, 4),
+            })
+        return rows
+
+    def get_euro_scores_table(self) -> List[Dict]:
+        scores = self.compute_euro_scores()
+        rows = []
+        for n, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+            rows.append({
+                "Liczba 2/12": format_num(n),
+                "Score": round(score, 4),
+            })
+        return rows
+
 
 # ============================================================
-# UI / STREAMLIT
+# UI
 # ============================================================
 
 def render_header():
@@ -944,7 +872,7 @@ def render_header():
 
 
 def render_sidebar():
-    st.sidebar.header("Ustawienia")
+    st.sidebar.header("Ustawienia analizy")
 
     max_draws = st.sidebar.number_input(
         "Maksymalna liczba losowań do analizy",
@@ -954,15 +882,15 @@ def render_sidebar():
         step=1,
     )
 
-    ticket_count = st.sidebar.number_input(
+    tickets_count = st.sidebar.number_input(
         "Ile kuponów wygenerować",
         min_value=1,
         max_value=20,
-        value=5,
+        value=DEFAULT_TICKETS_COUNT,
         step=1,
     )
 
-    debug_mode = st.sidebar.checkbox("Pokaż diagnostykę parsera PDF", value=False)
+    show_diagnostics = st.sidebar.checkbox("Pokaż diagnostykę parsera", value=False)
 
     st.sidebar.subheader("Wagi algorytmu")
 
@@ -998,10 +926,10 @@ def render_sidebar():
     )
 
     seed = st.sidebar.number_input(
-        "Seed losowania",
+        "Seed",
         min_value=0,
         max_value=999999,
-        value=RANDOM_SEED_DEFAULT,
+        value=DEFAULT_RANDOM_SEED,
         step=1,
     )
 
@@ -1018,11 +946,11 @@ def render_sidebar():
         seed=int(seed),
     )
 
-    return int(max_draws), int(ticket_count), debug_mode, config
+    return int(max_draws), int(tickets_count), show_diagnostics, config
 
 
 def render_file_inputs():
-    st.subheader("Pliki wejściowe PDF")
+    st.subheader("Pliki wejściowe")
 
     col1, col2 = st.columns(2)
 
@@ -1040,17 +968,17 @@ def render_file_inputs():
             key="euro_pdf",
         )
 
-    use_default_files = st.checkbox(
-        "Użyj plików z lokalnego folderu aplikacji, jeśli nie wgrywam ręcznie",
+    use_local_files = st.checkbox(
+        "Użyj plików z katalogu aplikacji, jeśli nie wgrywam ręcznie",
         value=True,
     )
 
-    return main_uploaded, euro_uploaded, use_default_files
+    return main_uploaded, euro_uploaded, use_local_files
 
 
 def resolve_pdf_source(uploaded_file, default_path: str):
     if uploaded_file is not None:
-        return ensure_bytesio(uploaded_file)
+        return make_bytesio_from_upload(uploaded_file)
 
     if os.path.exists(default_path):
         return default_path
@@ -1070,28 +998,49 @@ def render_summary(analyzer: EuroJackpotAnalyzer):
         st.metric("Zakres Euro", "2 z 12")
 
     if analyzer.draws:
-        newest = analyzer.draws[0].draw_id
-        oldest = analyzer.draws[-1].draw_id
-        st.write(f"**Najświeższe losowanie ID:** {newest}")
-        st.write(f"**Najstarsze losowanie ID:** {oldest}")
+        st.write(f"**Najświeższe losowanie ID:** {analyzer.draws[0].draw_id}")
+        st.write(f"**Najstarsze losowanie ID:** {analyzer.draws[-1].draw_id}")
 
 
-def render_top_numbers(analyzer: EuroJackpotAnalyzer):
-    st.subheader("Najczęstsze liczby")
+def render_generated_tickets(analyzer: EuroJackpotAnalyzer, tickets_count: int):
+    st.subheader("Wygenerowane kupony")
+
+    best_main, best_euro = analyzer.generate_ticket()
+
+    st.success(
+        f"Najmocniejsza propozycja: "
+        f"**{format_number_list(best_main)} + {format_number_list(best_euro)}**"
+    )
+
+    tickets = analyzer.generate_multiple_tickets(tickets_count)
+
+    rows = []
+    for idx, (main_nums, euro_nums) in enumerate(tickets, start=1):
+        rows.append({
+            "Kupon": idx,
+            "Liczby główne 5/50": format_number_list(main_nums),
+            "Liczby Euro 2/12": format_number_list(euro_nums),
+        })
+
+    st.dataframe(rows, use_container_width=True)
+
+
+def render_frequencies(analyzer: EuroJackpotAnalyzer):
+    st.subheader("Częstotliwość liczb")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### TOP liczby 5/50")
+        st.markdown("### 5/50")
         st.dataframe(analyzer.get_main_frequency_table(), use_container_width=True, height=500)
 
     with col2:
-        st.markdown("### TOP liczby 2/12")
+        st.markdown("### 2/12")
         st.dataframe(analyzer.get_euro_frequency_table(), use_container_width=True, height=500)
 
 
 def render_patterns(analyzer: EuroJackpotAnalyzer):
-    st.subheader("Wzorce")
+    st.subheader("Najczęstsze układy i wzorce")
 
     col1, col2 = st.columns(2)
 
@@ -1102,13 +1051,16 @@ def render_patterns(analyzer: EuroJackpotAnalyzer):
         st.markdown("### Najczęstsze trójki 5/50")
         st.dataframe(analyzer.get_main_triples_table(20), use_container_width=True)
 
-        st.markdown("### Układ parzyste/nieparzyste 5/50")
+        st.markdown("### Najczęstsze pełne układy 5/50")
+        st.dataframe(analyzer.get_main_fullsets_table(10), use_container_width=True)
+
+        st.markdown("### Parzyste / nieparzyste 5/50")
         st.dataframe(
             analyzer.get_pattern_table(analyzer.main_even_odd_patterns, "Układ"),
             use_container_width=True,
         )
 
-        st.markdown("### Układ niskie/wysokie 5/50")
+        st.markdown("### Niskie / wysokie 5/50")
         st.dataframe(
             analyzer.get_pattern_table(analyzer.main_low_high_patterns, "Układ"),
             use_container_width=True,
@@ -1118,152 +1070,86 @@ def render_patterns(analyzer: EuroJackpotAnalyzer):
         st.markdown("### Najczęstsze pary 2/12")
         st.dataframe(analyzer.get_euro_pairs_table(15), use_container_width=True)
 
-        st.markdown("### Układ parzyste/nieparzyste 2/12")
+        st.markdown("### Najczęstsze pełne układy 2/12")
+        st.dataframe(analyzer.get_euro_fullsets_table(10), use_container_width=True)
+
+        st.markdown("### Parzyste / nieparzyste 2/12")
         st.dataframe(
             analyzer.get_pattern_table(analyzer.euro_even_odd_patterns, "Układ"),
             use_container_width=True,
         )
 
-        st.markdown("### Układ niskie/wysokie 2/12")
+        st.markdown("### Niskie / wysokie 2/12")
         st.dataframe(
             analyzer.get_pattern_table(analyzer.euro_low_high_patterns, "Układ"),
             use_container_width=True,
         )
 
 
-def render_generated_tickets(analyzer: EuroJackpotAnalyzer, ticket_count: int):
-    st.subheader("Wygenerowane kupony")
-
-    best_main, best_euro = analyzer.generate_ticket()
-
-    st.success(
-        f"Najmocniejsza propozycja: "
-        f"**{format_number_list(best_main)} + {format_number_list(best_euro)}**"
-    )
-
-    tickets = analyzer.generate_multiple_tickets(ticket_count)
-
-    rows = []
-    for i, (main_nums, euro_nums) in enumerate(tickets, start=1):
-        rows.append({
-            "Kupon": i,
-            "Liczby główne 5/50": format_number_list(main_nums),
-            "Liczby Euro 2/12": format_number_list(euro_nums),
-        })
-
-    st.dataframe(rows, use_container_width=True)
-
-
-def render_diagnostics(diagnostics: Dict):
-    st.subheader("Diagnostyka parsera")
-
-    st.markdown("### Podsumowanie wspólnych losowań")
-    st.json({
-        "common_ids_count": diagnostics.get("common_ids_count"),
-        "common_ids_preview": diagnostics.get("common_ids_preview"),
-    })
-
-    for kind_key, title in [("main", "Diagnostyka pliku 5/50"), ("euro", "Diagnostyka pliku 2/12")]:
-        if kind_key not in diagnostics:
-            continue
-
-        st.markdown(f"### {title}")
-        block = diagnostics[kind_key]
-
-        summary = {
-            "kind": block.get("kind"),
-            "pages": block.get("pages"),
-            "total_draw_ids_found": block.get("total_draw_ids_found"),
-            "total_rows_found_words": block.get("total_rows_found_words"),
-            "total_rows_found_text": block.get("total_rows_found_text"),
-            "usable": block.get("usable"),
-            "draw_ids_preview": block.get("draw_ids_preview"),
-            "rows_preview": block.get("rows_preview"),
-        }
-        st.json(summary)
-
-        for page_info in block.get("page_info", []):
-            with st.expander(f"Strona {page_info['page']}"):
-                st.write({
-                    "draw_ids_found": page_info["draw_ids_found"],
-                    "candidate_tokens_count": page_info["candidate_tokens_count"],
-                    "rows_from_words": page_info["rows_from_words"],
-                    "rows_from_text": page_info["rows_from_text"],
-                    "rows_selected": page_info["rows_selected"],
-                })
-
-                st.markdown("**Podgląd tokenów:**")
-                st.code(" ".join(page_info["first_tokens_preview"][:120]), language="text")
-
-                st.markdown("**Podgląd tekstu:**")
-                st.code(page_info["first_text_preview"], language="text")
-
-
-def render_scores_preview(analyzer: EuroJackpotAnalyzer):
-    st.subheader("Podgląd scoringu liczb")
-
-    main_scores = analyzer.compute_main_scores()
-    euro_scores = analyzer.compute_euro_scores()
-
-    main_rows = []
-    for n, score in sorted(main_scores.items(), key=lambda x: x[1], reverse=True):
-        main_rows.append({
-            "Liczba 5/50": format_num(n),
-            "Score": round(score, 4),
-        })
-
-    euro_rows = []
-    for n, score in sorted(euro_scores.items(), key=lambda x: x[1], reverse=True):
-        euro_rows.append({
-            "Liczba 2/12": format_num(n),
-            "Score": round(score, 4),
-        })
+def render_scores(analyzer: EuroJackpotAnalyzer):
+    st.subheader("Scoring liczb")
 
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("### Score 5/50")
-        st.dataframe(main_rows, use_container_width=True, height=500)
+        st.dataframe(analyzer.get_main_scores_table(), use_container_width=True, height=500)
 
     with col2:
         st.markdown("### Score 2/12")
-        st.dataframe(euro_rows, use_container_width=True, height=500)
+        st.dataframe(analyzer.get_euro_scores_table(), use_container_width=True, height=500)
 
 
-def render_footer_note():
+def render_diagnostics(diagnostics: Dict):
+    st.subheader("Diagnostyka parsera")
+
+    st.markdown("### Podsumowanie")
+    st.json({
+        "common_ids_count": diagnostics.get("common_ids_count"),
+        "common_ids_preview": diagnostics.get("common_ids_preview"),
+    })
+
+    st.markdown("### Diagnostyka 5/50")
+    st.json(diagnostics.get("main", {}))
+
+    st.markdown("### Diagnostyka 2/12")
+    st.json(diagnostics.get("euro", {}))
+
+
+def render_footer():
     st.info(
-        "To narzędzie analizuje historyczne dane i generuje kupony na podstawie częstotliwości, "
-        "powtarzalnych układów i scoringu. Nie gwarantuje trafienia, bo losowanie pozostaje losowe."
+        "Aplikacja analizuje historię losowań i generuje kupony na podstawie statystyk, "
+        "ale nie gwarantuje trafienia, bo losowanie nadal jest losowe."
     )
 
 
 # ============================================================
-# GŁÓWNA LOGIKA APLIKACJI
+# MAIN
 # ============================================================
 
 def main():
     render_header()
 
-    max_draws, ticket_count, debug_mode, analyzer_config = render_sidebar()
-    main_uploaded, euro_uploaded, use_default_files = render_file_inputs()
+    max_draws, tickets_count, show_diagnostics, analyzer_config = render_sidebar()
+    main_uploaded, euro_uploaded, use_local_files = render_file_inputs()
 
     main_source = None
     euro_source = None
 
     if main_uploaded is not None:
         main_source = resolve_pdf_source(main_uploaded, DEFAULT_MAIN_PDF)
-    elif use_default_files:
+    elif use_local_files:
         main_source = resolve_pdf_source(None, DEFAULT_MAIN_PDF)
 
     if euro_uploaded is not None:
         euro_source = resolve_pdf_source(euro_uploaded, DEFAULT_EURO_PDF)
-    elif use_default_files:
+    elif use_local_files:
         euro_source = resolve_pdf_source(None, DEFAULT_EURO_PDF)
 
     if main_source is None or euro_source is None:
         st.warning(
             "Wgraj oba pliki PDF albo umieść w katalogu aplikacji pliki "
-            "`wyniki1ej.pdf` i `wyniki2ej.pdf`."
+            "`wyniki1ej.pdf` oraz `wyniki2ej.pdf`."
         )
         st.stop()
 
@@ -1273,58 +1159,47 @@ def main():
         st.stop()
 
     try:
-        with st.spinner("Wczytywanie i analiza PDF..."):
+        with st.spinner("Trwa analiza plików PDF..."):
             draws, diagnostics = load_draws(
                 main_source,
                 euro_source,
                 max_draws=max_draws,
-                debug=debug_mode,
             )
 
-        analyzer = EuroJackpotAnalyzer(draws, analyzer_config)
+            analyzer = EuroJackpotAnalyzer(draws, analyzer_config)
 
         render_summary(analyzer)
-        render_generated_tickets(analyzer, ticket_count)
-        render_top_numbers(analyzer)
+        render_generated_tickets(analyzer, tickets_count)
+        render_frequencies(analyzer)
         render_patterns(analyzer)
-        render_scores_preview(analyzer)
+        render_scores(analyzer)
 
-        if debug_mode:
+        if show_diagnostics:
             render_diagnostics(diagnostics)
 
-        render_footer_note()
+        render_footer()
 
     except Exception as e:
-        st.error(f"Wystąpił błąd: {str(e)}")
-
-        st.markdown("## Diagnostyka awaryjna")
+        st.error(f"Wystąpił błąd: {e}")
 
         try:
             if main_source is not None:
-                main_text_pages = extract_pages_text(main_source)
-                st.markdown("### Podgląd pierwszej strony pliku 5/50")
-                if main_text_pages:
-                    st.code(main_text_pages[0][:4000], language="text")
-
+                st.markdown("### Podgląd początku pliku 5/50")
+                text_main = extract_text_from_pdf(main_source)
+                st.code(text_main[:4000], language="text")
         except Exception as diag_err:
             st.warning(f"Nie udało się pokazać diagnostyki pliku 5/50: {diag_err}")
 
         try:
             if euro_source is not None:
-                euro_text_pages = extract_pages_text(euro_source)
-                st.markdown("### Podgląd pierwszej strony pliku 2/12")
-                if euro_text_pages:
-                    st.code(euro_text_pages[0][:4000], language="text")
-
+                st.markdown("### Podgląd początku pliku 2/12")
+                text_euro = extract_text_from_pdf(euro_source)
+                st.code(text_euro[:4000], language="text")
         except Exception as diag_err:
             st.warning(f"Nie udało się pokazać diagnostyki pliku 2/12: {diag_err}")
 
         raise
 
-
-# ============================================================
-# START
-# ============================================================
 
 if __name__ == "__main__":
     main()
