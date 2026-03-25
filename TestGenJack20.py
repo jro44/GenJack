@@ -33,7 +33,7 @@ EURO_MAX = 12
 
 DEFAULT_WEIGHT_FREQ = 0.25
 DEFAULT_WEIGHT_RECENCY = 0.15
-DEFAULT_WEIGHT_RHYTHM = 0.35  # Nowa waga dla rytmiki!
+DEFAULT_WEIGHT_RHYTHM = 0.35  
 DEFAULT_WEIGHT_PAIR = 0.15
 DEFAULT_WEIGHT_TRIPLE = 0.10
 
@@ -64,7 +64,6 @@ class AnalyzerConfig:
     hot_pool_euro: int
     generation_attempts: int
     seed: int
-    # Nowe zasady do walidacji (brak hardcodingu)
     rule_force_even_odd: bool
     rule_force_spread: bool
 
@@ -88,9 +87,6 @@ def format_number_list(nums: List[int]) -> str:
 
 
 def calculate_zscores(values_dict: Dict[int, float]) -> Dict[int, float]:
-    """
-    Zoptymalizowana funkcja Z-Score. Oblicza wariancję raz dla całego zbioru!
-    """
     if not values_dict:
         return {}
     
@@ -138,7 +134,7 @@ def make_bytesio_from_upload(uploaded_file) -> io.BytesIO:
 
 
 # ============================================================
-# NOWY, INTELIGENTNY PARSER PDF (BAZUJĄCY NA WSPÓŁRZĘDNYCH)
+# INTELIGENTNY PARSER PDF (KULOODPORNY)
 # ============================================================
 
 def open_pdf_document(pdf_source):
@@ -154,27 +150,47 @@ def open_pdf_document(pdf_source):
 
 
 def parse_pdf_multipasko(pdf_source, is_main: bool, max_draws: int = 999) -> Tuple[Dict[int, List[int]], Dict]:
-    """
-    Inteligentny parser. Sortuje słowa z PDF po osi Y i X, żeby czytać tabelę
-    zgodnie z ułożeniem wizualnym, a nie z wewnętrznym, zepsutym układem kolumn.
-    """
     doc = open_pdf_document(pdf_source)
     all_tokens = []
     
     for page in doc:
         words = page.get_text("words")
-        # (x0, y0, x1, y1, text, block_no, line_no, word_no)
-        # Zaokrąglamy Y do 8 pikseli, aby zgrupować tekst w tej samej linijce wizualnej
-        words.sort(key=lambda w: (round(w[1] / 8) * 8, w[0]))
         
+        # Szykujemy współrzędne: środek Y, X, i sam tekst
+        words_with_coords = []
         for w in words:
-            # Wyciągamy same cyfry (np. ignorujemy apostrofy czy kropki)
-            clean_word = re.sub(r'[^\d]', '', w[4])
-            if clean_word:
-                all_tokens.append(clean_word)
+            mid_y = (w[1] + w[3]) / 2
+            words_with_coords.append((mid_y, w[0], w[4]))
+        
+        # Grupujemy z odstępem Y ~8 pikseli (eliminuje problem lekkich przesunięć)
+        words_with_coords.sort(key=lambda x: x[0])
+        
+        lines = []
+        current_line = []
+        current_y = -100
+        
+        for mid_y, x0, text in words_with_coords:
+            if abs(mid_y - current_y) > 8:
+                if current_line:
+                    current_line.sort(key=lambda item: item[0])
+                    lines.append(current_line)
+                current_line = [(x0, text)]
+                current_y = mid_y
+            else:
+                current_line.append((x0, text))
                 
+        if current_line:
+            current_line.sort(key=lambda item: item[0])
+            lines.append(current_line)
+            
+        # Niezawodne wyciąganie WSZYSTKICH liczb bez względu na to jak skleił je PDF
+        for line in lines:
+            for x0, text in line:
+                for token in re.findall(r'\d+', text):
+                    all_tokens.append(token)
+                    
     doc.close()
-
+    
     req_count = 5 if is_main else 2
     max_val = MAIN_MAX if is_main else EURO_MAX
     file_label = "5/50" if is_main else "2/12"
@@ -184,27 +200,33 @@ def parse_pdf_multipasko(pdf_source, is_main: bool, max_draws: int = 999) -> Tup
     current_nums = []
     
     for token in all_tokens:
-        # ID Losowania to zawsze 4 cyfry (Multipasko używa padingu np. 0940, 0012)
-        if len(token) == 4:
-            # Zapisz poprzednie losowanie, jeśli jest kompletne
-            if current_id is not None and len(set(current_nums)) == req_count:
-                draws[current_id] = sorted(list(set(current_nums)))
+        val = int(token)
+        
+        # Identyfikujemy ID losowania (zabezpieczone przed wczytywaniem lat z footera np. 2026)
+        is_id = False
+        if len(token) == 4 and val <= 1500:
+            is_id = True
+        elif 50 < val <= 1500:
+            is_id = True
             
-            current_id = int(token)
+        if is_id:
+            # Zapisujemy tylko pierwsze req_count liczb, odcinając śmieci z końca linijki
+            if current_id is not None and len(current_nums) >= req_count:
+                draws[current_id] = sorted(current_nums[:req_count])
+                
+            current_id = val
             current_nums = []
             
-        # Liczby to 1 lub 2 cyfry
-        elif len(token) in (1, 2) and current_id is not None:
-            val = int(token)
+        elif current_id is not None:
             if 1 <= val <= max_val:
                 if val not in current_nums:
                     current_nums.append(val)
                     
-    # Zapisz ostatnie losowanie
-    if current_id is not None and len(set(current_nums)) == req_count:
-        draws[current_id] = sorted(list(set(current_nums)))
+    # Zapisz losowanie z końca pliku
+    if current_id is not None and len(current_nums) >= req_count:
+        draws[current_id] = sorted(current_nums[:req_count])
 
-    # Przygotuj wynik w kolejności malejącej
+    # Zwracamy posortowane od najwyższego do najniższego, ucicnając do max_draws
     sorted_draws = {}
     for did in sorted(draws.keys(), reverse=True)[:max_draws]:
         sorted_draws[did] = draws[did]
@@ -216,7 +238,7 @@ def parse_pdf_multipasko(pdf_source, is_main: bool, max_draws: int = 999) -> Tup
     }
 
     if not sorted_draws:
-        raise ValueError(f"Nie udało się zbudować mapy losowań dla {file_label}. Sprawdź plik.")
+        raise ValueError(f"Nie udało się zbudować mapy losowań dla {file_label}.")
 
     return sorted_draws, diagnostics
 
@@ -268,7 +290,6 @@ class EuroJackpotAnalyzer:
 
         self._analyze()
         
-        # Analiza rytmiki
         self.main_intervals = self._analyze_intervals(MAIN_MIN, MAIN_MAX, is_main=True)
         self.euro_intervals = self._analyze_intervals(EURO_MIN, EURO_MAX, is_main=False)
 
@@ -287,14 +308,7 @@ class EuroJackpotAnalyzer:
             for pair in itertools.combinations(euro, 2):
                 self.euro_pair_counter[pair] += 1
 
-    # --------------------------------------------------------
-    # RYTMIKA (NOWOŚĆ!)
-    # --------------------------------------------------------
     def _analyze_intervals(self, min_val: int, max_val: int, is_main: bool) -> Dict[int, Dict]:
-        """
-        Analizuje chronologicznie historię, badając co ile losowań pada dana cyfra.
-        """
-        # Odwracamy losowania -> od najstarszego do najnowszego
         chronological_draws = list(reversed(self.draws))
         
         intervals_data = {n: {'gaps': [], 'most_common_gap': 0, 'current_gap': 0} 
@@ -320,15 +334,10 @@ class EuroJackpotAnalyzer:
 
             if intervals_data[n]['gaps']:
                 gap_counts = Counter(intervals_data[n]['gaps'])
-                # Wybieramy najczęstszy odstęp
                 most_common = gap_counts.most_common(1)[0][0]
                 intervals_data[n]['most_common_gap'] = most_common
 
         return intervals_data
-
-    # --------------------------------------------------------
-    # SCORING (Z ZOPTYMALIZOWANYM Z-SCORE I RYTMIKĄ)
-    # --------------------------------------------------------
     
     def compute_main_scores(self) -> Dict[int, float]:
         freq_dict = {n: self.main_counter[n] for n in range(MAIN_MIN, MAIN_MAX + 1)}
@@ -353,12 +362,11 @@ class EuroJackpotAnalyzer:
             most_common = self.main_intervals[n]['most_common_gap']
             current = self.main_intervals[n]['current_gap']
             
-            # Algorytm rytmiki!
             if most_common > 0:
                 if current == most_common:
-                    rhythm_bonus = 3.0  # Perfekcyjne trafienie w rytm
+                    rhythm_bonus = 3.0  
                 elif abs(current - most_common) == 1:
-                    rhythm_bonus = 1.0  # Bardzo blisko rytmu
+                    rhythm_bonus = 1.0  
 
             total_score = (
                 self.config.weight_freq * freq_z.get(n, 0) +
@@ -402,10 +410,6 @@ class EuroJackpotAnalyzer:
 
         return scores
 
-    # --------------------------------------------------------
-    # WALIDACJA KUPONU (Teraz sterowana z Configu!)
-    # --------------------------------------------------------
-
     def validate_main_ticket(self, nums: List[int]) -> bool:
         nums = sorted(nums)
 
@@ -431,10 +435,6 @@ class EuroJackpotAnalyzer:
         if len(nums) != 2 or len(set(nums)) != 2:
             return False
         return True
-
-    # --------------------------------------------------------
-    # GENERATOR
-    # --------------------------------------------------------
 
     def weighted_sample_without_replacement(self, candidates: List[int], weights: Dict[int, float], k: int) -> List[int]:
         pool = list(candidates)
@@ -499,10 +499,6 @@ class EuroJackpotAnalyzer:
 
         return results
 
-    # --------------------------------------------------------
-    # TABELE POD UI
-    # --------------------------------------------------------
-
     def get_rhythm_table(self, is_main: bool) -> List[Dict]:
         min_v, max_v = (MAIN_MIN, MAIN_MAX) if is_main else (EURO_MIN, EURO_MAX)
         intervals = self.main_intervals if is_main else self.euro_intervals
@@ -518,7 +514,6 @@ class EuroJackpotAnalyzer:
                 "W Rytmie?": "✅ TAK" if intervals[n]['current_gap'] == intervals[n]['most_common_gap'] else "❌ NIE",
             })
         
-        # Sortuj po tych, które są najbliżej rytmu, a potem po częstotliwości
         rows.sort(key=lambda x: (
             abs(x["Aktualny Odstęp"] - x["Ulubiony Rytm (Odstęp)"]), 
             -x["Trafienia (Łącznie)"]
@@ -548,7 +543,7 @@ def render_sidebar():
 
     config = AnalyzerConfig(
         weight_freq=weight_freq,
-        weight_recency=0.0, # Zastąpione w dużej mierze rytmiką
+        weight_recency=0.0, 
         weight_rhythm=weight_rhythm,
         weight_pair=weight_pair,
         weight_triple=weight_triple,
